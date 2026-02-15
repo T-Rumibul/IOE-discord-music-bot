@@ -8,5 +8,6 @@ if(!clientId || !token) {
     logger.error('Missing Client ID or Token');
     process.exit(1);
 }
+process.env.TEST_TEST = 'test-123'
 const client = new IOEClient(clientId, token);
 client.login();

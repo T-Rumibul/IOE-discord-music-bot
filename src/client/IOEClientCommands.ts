@@ -29,9 +29,9 @@ export class IOECLientCommands {
         for (const file of files) {
             const comandName = file.split('.')[0]
 
-            const mod: {default: Command } | { default: unknown} = await import(pathToFileURL(path.join(commandsDir, file)).href);
+            const mod: { default: Command } | { default: unknown } = await import(pathToFileURL(path.join(commandsDir, file)).href);
 
-           
+
             if (!(mod.default instanceof Command)) {
                 throw new Error(
                     `Event file "${file}" must default export a class named Command. This can be done by using defineCommand, 
@@ -50,46 +50,62 @@ export class IOECLientCommands {
      * @throws {Error} If the client token hasn't been found.
      */
     async deploy() {
-        if(!this.loaded) await this.load()
+        if (!this.loaded) await this.load()
         const token = this.client.token
-        if(!token) throw new Error('Token not found')
+        if (!token) throw new Error('Token not found')
+        const rest = new REST().setToken(token);
+        const commands = this.getCommandsJSON();
+        await rest.put(
+            Routes.applicationCommands(this.client.clientId), { body: commands.global }
+        )
+        const guilds = await this.client.guilds.fetch();
+        for (const guild of guilds.values()) {
+            await rest.put(
+            Routes.applicationGuildCommands(this.client.clientId, guild.id), { body: commands.guildOnly }
+        )
+        }
+        this.client.logger.info('Commands deployed');
+
+    }
+
+    /**
+     * Deletes all global commands that were deployed to the Discord API.
+     * If the commands haven't been loaded yet, it will load them first.
+     * If the client token hasn't been found, it will throw an error.
+     * Doesn't delete guild specific commands
+     * @throws {Error} If the client token hasn't been found.
+     */
+    async deleteAll() {
+        if (!this.loaded) await this.load()
+        const token = this.client.token
+        if (!token) throw new Error('Token not found')
         const rest = new REST().setToken(token);
         const data = await rest.put(
-            Routes.applicationCommands(this.client.clientId), {body: this.getCommandsJSON()}
-        )
-        this.client.logger.info('Commands deployed');
-         
-    }
-/**
- * Deletes all global commands that were deployed to the Discord API.
- * If the commands haven't been loaded yet, it will load them first.
- * If the client token hasn't been found, it will throw an error.
- * Doesn't delete guild specific commands
- * @throws {Error} If the client token hasn't been found.
- */
-    async deleteAll() {
-        if(!this.loaded) await this.load()
-        const token = this.client.token
-        if(!token) throw new Error('Token not found')
-        const rest = new REST().setToken(token);
-           const data = await rest.put(
-            Routes.applicationCommands(this.client.clientId), {body: []}
+            Routes.applicationCommands(this.client.clientId), { body: [] }
         )
         this.client.logger.info('Commands deleted');
     }
     private getCommandsJSON() {
-        const commands = [];
+        const commands = {
+            guildOnly: [] as any,
+            global: [] as any
+        };
         for (const command of this.commands.values()) {
-            commands.push(command.data.toJSON());
+            if(command.options.disabled) continue;
+            if (command.options.guildOnly) {
+                commands.guildOnly.push(command.data.toJSON());
+                continue;
+            }
+            commands.global.push(command.data.toJSON());
         }
         return commands;
     }
 
-/**
- * Invokes the handler of a command given an interaction.
- * If the command doesn't exist, it does nothing.
- * @param {ChatInputCommandInteraction} interaction - The interaction to invoke the command with.
- */
+    /**
+     * Invokes the handler of a command given an interaction.
+     * If the command doesn't exist, it does nothing.
+     * @param {ChatInputCommandInteraction} interaction - The interaction to invoke the command with.
+     */
     invokeCommand(interaction: ChatInputCommandInteraction) {
         const command = this.commands.get(interaction.commandName);
         if (command) {
@@ -103,9 +119,12 @@ export class IOECLientCommands {
 type CommandHandler =
     (client: IOEClient, interaction: ChatInputCommandInteraction) => void;
 class Command {
-    constructor(public data: SlashCommandBuilder, public handler: CommandHandler) { }
+    constructor(public data: SlashCommandBuilder, public handler: CommandHandler, public options: CommandOptions = {}) { }
 }
-
+type CommandOptions = {
+    guildOnly?: boolean;
+    disabled?: boolean;
+}
 /**
  * Defines a command for the IOEClient.
  * @param {SlashCommandBuilder} command - The SlashCommandBuilder instance that defines the command.
@@ -118,5 +137,6 @@ class Command {
 
 export const defineCommand = (
     command: SlashCommandBuilder,
-    handler: CommandHandler
-) => new Command(command, handler);
+    handler: CommandHandler,
+    options: CommandOptions = {}
+) => new Command(command, handler, options);

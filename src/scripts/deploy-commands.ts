@@ -11,5 +11,7 @@ if(!clientId || !token) {
 }
 const client = new IOEClient(clientId, token);
 
+// Needed to login to fetch guilds for guild specific commands
+await client.login()
 await client.commands.deploy();
-
+process.exit(0);

@@ -4,6 +4,7 @@ import {
   ChannelType,
   ChatInputCommandInteraction,
   PermissionFlagsBits,
+  SlashCommandAttachmentOption,
   SlashCommandBuilder,
   SlashCommandNumberOption,
 } from 'discord.js';

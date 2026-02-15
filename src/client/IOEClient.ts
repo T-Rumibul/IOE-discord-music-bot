@@ -1,13 +1,15 @@
-import type { Guild, GuildMember, Message, TextChannel } from 'discord.js'
+import type { Guild, GuildMember, GuildTextBasedChannel, Message, TextChannel } from 'discord.js'
 import { ChannelType, Client, IntentsBitField, PermissionFlagsBits } from 'discord.js';
 
 import { logger, sleep } from '../utils/index.js'
 import { IOEClientEvents } from './IOEClientEvents.js';
 import { IOEClientDatabase } from './IOEClientDatabase.js';
 import { IOECLientCommands } from './IOEClientCommands.js';
+import { IOEClientPlayer } from './IOEClientPlayer.js';
 export class IOEClient extends Client {
   private eventsHandler = new IOEClientEvents(this);
   commands = new IOECLientCommands(this);
+  public player = new IOEClientPlayer(this);
   public logger = logger;
   public db = new IOEClientDatabase(this);
   /**
@@ -41,13 +43,13 @@ export class IOEClient extends Client {
    * @returns {Promise<void>}
    */
   private async beforeLogin() {
-      await this.eventsHandler.registerEvents();
-      await this.commands.load();
+    await this.eventsHandler.registerEvents();
+    await this.commands.load();
   }
- public async login(): Promise<string> {
+  public async login(): Promise<string> {
     await this.beforeLogin();
     return await super.login();
-    
+
   }
   /**
    * Checks if a member has the administrator permission or any of the roles specified in `adminRoles`.
@@ -178,6 +180,25 @@ export class IOEClient extends Client {
         }
         await sleep(1);
       }
+    }
+  }
+  /**
+   * Sends a mention to a guild member in a guild text channel.
+   * The mention is sent as a message with the content specified.
+   * If a timeout is specified, the message will be deleted after the timeout.
+   * @param {TextChannel} channel - The channel to send the mention to.
+   * @param {string} content - The content of the message to send.
+   * @param {GuildMember} member - The guild member to mention.
+   * @param {number} [timeout] - The timeout in milliseconds.
+   */
+  async sendMention(channel: GuildTextBasedChannel, content: string, member: GuildMember, timeout?: number) {
+    try {
+      const msg = await channel.send(`<@!${member.id}>, ${content}`);
+      if (timeout) {
+        this.deleteMessageTimeout(msg, timeout);
+      }
+    } catch (e) {
+      this.logger.error(e, `Error sending mention in guild ${channel.guild.name}`);
     }
   }
 }
