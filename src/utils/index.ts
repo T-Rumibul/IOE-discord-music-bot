@@ -96,19 +96,19 @@ export class YTDLP extends YtDlp {
     super(options);
   }
 
-  stream<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress"> = {cookies: cookiesFile}): Stream {
+  stream<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress"> = { cookies: cookiesFile }): Stream {
     if (!options.cookies) {
       options = { ...options, cookies: cookiesFile }
     }
     return super.stream(url, options);
   }
-  download<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress" | "beforeDownload"> = {cookies: cookiesFile}): Download {
+  download<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress" | "beforeDownload"> = { cookies: cookiesFile }): Download {
     if (!options.cookies) {
       options = { ...options, cookies: cookiesFile }
     }
     return super.download(url, options);
   }
-  getInfoAsync<T extends "video" | "playlist">(url: string, options: InfoOptions = {cookies: cookiesFile}): Promise<T extends "video" ? VideoInfo : PlaylistInfo> {
+  getInfoAsync<T extends "video" | "playlist">(url: string, options: InfoOptions = { cookies: cookiesFile }): Promise<T extends "video" ? VideoInfo : PlaylistInfo> {
     if (!options.cookies) {
       options = { ...options, cookies: cookiesFile }
     }
