@@ -1,13 +1,11 @@
 import { IOEClient } from "./client/IOEClient.js";
-import dotenv from "dotenv";
 import { logger } from './utils/index.js';
-dotenv.config();
-const clientId = process.env.CLIENT_ID;
-const token = process.env.TOKEN;
-if(!clientId || !token) {
-    logger.error('Missing Client ID or Token');
-    process.exit(1);
+import { startServer } from "./server.js";
+import { getConfig } from "./config.js";
+const config = getConfig();
+
+if(!config.DOWNLOADS_COMMAND_DISABLED) {
+    await startServer().catch(e => logger.error(e, 'Failed to start server'));
 }
-process.env.TEST_TEST = 'test-123'
-const client = new IOEClient(clientId, token);
+const client = new IOEClient(config.CLIENT_ID, config.TOKEN);
 client.login();

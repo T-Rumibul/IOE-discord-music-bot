@@ -1,11 +1,9 @@
 import type { Attachment, GuildMember, GuildTextBasedChannel } from "discord.js";
 import { AudioPlayer, AudioPlayerStatus, createAudioPlayer, createAudioResource, DiscordGatewayAdapterCreator, getVoiceConnection, joinVoiceChannel, NoSubscriberBehavior, StreamType } from "@discordjs/voice";
-import { VideoInfo, YtDlp } from "ytdlp-nodejs";
+import { VideoInfo } from "ytdlp-nodejs";
+import { regexYoutube, YTDLP } from "../utils/index.js";
 import { IOEClient } from "./IOEClient.js";
 import { shuffle } from "../utils/index.js";
-
-import path from "path";
-
 type QueueItem = {
     url: string;
     title: string;
@@ -24,11 +22,9 @@ type QueueItem = {
     type: 'attachment';
 }
 
-const regexYoutube =
-    /.*(?:(?:youtu.be\/)|(?:v\/)|(?:\/u\/\w\/)|(?:embed\/)|(?:watch\?))\??v?=?([^#\&\?]*).*/;
 
-const ytdlp = new YtDlp();
-const cookiesFile = path.join(process.cwd(), 'cookies.txt')
+
+const ytdlp = new YTDLP();
 export class IOEClientPlayer {
     private queue = new PlayerQueue();
     private guildPlayers: Map<string, AudioPlayer> = new Map();
@@ -137,9 +133,7 @@ export class IOEClientPlayer {
     private createAudioResource(queueItem: QueueItem) {
         try {
             if (queueItem.type === 'youtube') {
-                const stream = ytdlp.stream(queueItem.url, {
-                    cookies: cookiesFile,
-                }).filter('audioonly').audioQuality('10');
+                const stream = ytdlp.stream(queueItem.url).filter('audioonly').audioQuality('10');
 
                 const resource = createAudioResource(stream.getStream(), {
                     inputType: StreamType.Arbitrary,
@@ -155,30 +149,6 @@ export class IOEClientPlayer {
             throw new Error('Unsupported queue item type');
         } catch (e) {
             this.client.logger.error(e, `Error creating audio resource for ${queueItem.title}`);
-            return null;
-        }
-    }
-    /**
-     * Downloads a YouTube video to a specified directory.
-     * @param {string} videoURL - The URL of the YouTube video to download.
-     * @param {string} dir - The directory to save the downloaded file to.
-     * @returns {Promise<string | null>} A promise that resolves with the path to the downloaded file, or null if an error occurred.
-     */
-    async download(videoURL: string, dir: string) {
-        try {
-            const urlMatch = videoURL.match(regexYoutube);
-            if (!urlMatch) return null;
-            const url = new URL(urlMatch[0]).searchParams.get('v') || ""
-            const info = await ytdlp.getInfoAsync(url, {
-                cookies: "cookies.txt"
-            }) as VideoInfo;
-            const downloadedFiles = await ytdlp.download(url, {
-                cookies: cookiesFile,
-                output: path.join(dir, `${info.title}.mp4`)
-            }).filter('audioandvideo').quality('highest').type('mp4').run()
-            return downloadedFiles.filePaths[0];
-        } catch (e) {
-            this.client.logger.error(e, `Error downloading ${videoURL}`);
             return null;
         }
     }
@@ -227,6 +197,9 @@ export class IOEClientPlayer {
                     const info = await ytdlp.getInfoAsync(new URL(urlMatch[0]).searchParams.get('v') || "", {
                         cookies: "cookies.txt"
                     }) as VideoInfo;
+                    console.log(info)
+                    await ytdlp.downloadAsync(new URL(urlMatch[0]).searchParams.get('v') || "", { cookies: "cookies.txt" });
+                    
                     return {
                         url: urlMatch[0],
                         title: info.title,

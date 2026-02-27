@@ -4,4 +4,4 @@ legacy
 .env
 database.db
 cookies.txt
-downloads_temp
+downloads_tmp

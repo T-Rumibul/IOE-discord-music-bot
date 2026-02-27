@@ -1,10 +1,12 @@
-import pino from "pino";
-import dotenv from "dotenv";
-dotenv.config();
-
-
+import pino from "pino"
+import path from "path";
+import { Download, FormatOptions, PlaylistInfo, QualityOptions, Stream, VideoInfo, YtDlp, YtDlpOptions } from "ytdlp-nodejs";
+import { getConfig } from "../config.js";
+const ytdlp = new YtDlp();
+const cookiesFile = path.join(process.cwd(), 'cookies.txt')
+const config = getConfig();
 export const logger = pino({
-  level: process.env.LOG_LEVEL ?? "info",
+  level: config.LOG_LEVEL,
   transport: {
     target: "pino-pretty",
     options: {
@@ -23,21 +25,21 @@ export const logger = pino({
  * const shuffledArray = shuffle(array);
  * console.log(shuffledArray); // [3, 1, 5, 2, 4]
  */
- export function shuffle<T>(inputArray: T[]): T[] {
-      const a = inputArray;
-      if (a.length === 0) return a;
-      // Iterate over the array backwards, starting at the last element
-      for (let i = a.length - 1; i > 0; i -= 1) {
-        // Generate a random index between 0 and the current index
-        const j = Math.floor(Math.random() * (i + 1));
+export function shuffle<T>(inputArray: T[]): T[] {
+  const a = inputArray;
+  if (a.length === 0) return a;
+  // Iterate over the array backwards, starting at the last element
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    // Generate a random index between 0 and the current index
+    const j = Math.floor(Math.random() * (i + 1));
 
-        // Swap the current element with a randomly selected element
-        const temp = a[i]!;
-        a[i] = a[j]!;
-        a[j] = temp;
-      }
-      return a;
+    // Swap the current element with a randomly selected element
+    const temp = a[i]!;
+    a[i] = a[j]!;
+    a[j] = temp;
   }
+  return a;
+}
 
 
 /**
@@ -47,9 +49,138 @@ export const logger = pino({
  * @returns {Promise<void>} A Promise that resolves after the specified amount of time has passed.
  */
 export const sleep = (time: number) => {
-    return new Promise<void>((resolve, reject) => {
-        setTimeout(() => {
-            resolve()
-        }, time * 1000)
-    })
+  return new Promise<void>((resolve, reject) => {
+    setTimeout(() => {
+      resolve()
+    }, time * 1000)
+  })
+}
+
+// From ytdlp-nodejs
+interface InfoOptions {
+  /**
+   * If `true`, returns a flat list with limited information for playlist items.
+   * If `false`, fetches full information for each video in the playlist.
+   * @default true
+   */
+  flatPlaylist?: boolean;
+  /**
+   * A string of cookies to use for authentication.
+   */
+  cookies?: string;
+  /**
+   * Use cookies automatically fetched from the browser.
+   */
+  cookiesFromBrowser?: string;
+  /**
+   * Disable using cookies from the browser.
+   */
+  noCookiesFromBrowser?: boolean;
+  /**
+   * Disable cookies entirely (overrides other cookie options).
+   */
+  noCookies?: boolean;
+}
+
+
+/**
+ * Extended YtDlp wrapper that automatically applies cookies when none is provided.
+ *
+ * This prevents repeated cookies configuration across the codebase.
+ */
+export class YTDLP extends YtDlp {
+  constructor(options: YtDlpOptions = { binaryPath: getYtdlpBinaryPath() }) {
+    if (!options.binaryPath) {
+      options = { ...options, binaryPath: getYtdlpBinaryPath() }
+    }
+    super(options);
+  }
+
+  stream<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress"> = {cookies: cookiesFile}): Stream {
+    if (!options.cookies) {
+      options = { ...options, cookies: cookiesFile }
+    }
+    return super.stream(url, options);
+  }
+  download<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress" | "beforeDownload"> = {cookies: cookiesFile}): Download {
+    if (!options.cookies) {
+      options = { ...options, cookies: cookiesFile }
+    }
+    return super.download(url, options);
+  }
+  getInfoAsync<T extends "video" | "playlist">(url: string, options: InfoOptions = {cookies: cookiesFile}): Promise<T extends "video" ? VideoInfo : PlaylistInfo> {
+    if (!options.cookies) {
+      options = { ...options, cookies: cookiesFile }
+    }
+    return super.getInfoAsync<T>(url, options);
+  }
+}
+
+export const regexYoutube =
+  /.*(?:(?:youtu.be\/)|(?:v\/)|(?:\/u\/\w\/)|(?:embed\/)|(?:watch\?))\??v?=?([^#\&\?]*).*/;
+
+
+/**
+ * Sanitizes a string by removing all non-Latin and non-Cyrillic characters and converting to lowercase.
+ * @param {string} input The string to sanitize.
+ * @returns {string} The sanitized string.
+ */
+export const sanitizeString = (input: string): string => {
+  return input
+    .toLowerCase()
+    .replace(/[^\p{Script=Latin}\p{Script=Cyrillic}\p{N}]/gu, "");
+}
+
+
+
+export class Mutex {
+  // Represents the promise that resolves when the current lock holder releases.
+  // Initially resolved, meaning the mutex is free.
+  private chain = Promise.resolve();
+
+  lock() {
+    // This function will be assigned to resolve the new promise.
+    // It becomes the "unlock" function returned to the caller.
+    let unlock!: () => void;
+
+    // Create a new pending promise representing THIS lock being held.
+    // It will resolve only when unlock() is called.
+    const next = new Promise<void>(resolve => {
+      // Store resolver so we can release the lock later.
+      unlock = () => {
+        resolve();
+      };
+    });
+
+    // Create a promise that waits for the previous lock (this.chain).
+    // When the previous lock finishes, return the unlock function
+    // to the caller so they can enter the critical section.
+    const rv = this.chain.then(() => unlock);
+
+    // Update the chain to the new pending promise.
+    // This ensures the NEXT caller waits until this one unlocks.
+    this.chain = next;
+
+    // Return a promise that resolves when it's the caller’s turn.
+    // The resolved value is the unlock function.
+    return rv;
+  }
+}
+
+
+export const getYtdlpBinaryPath = () => {
+  const binaries: Record<string, string> = {
+    win32_x64: 'yt-dlp.exe',
+    linux_x64: 'yt-dlp_linux',
+    linux_arm64: 'yt-dlp_linux_aarch64',
+    win32_arm64: 'yt-dlp_arm64.exe'
+  }
+  const arch = process.arch;
+  const platform = process.platform;
+
+  if (binaries[platform + '_' + arch]) {
+    return path.join(process.cwd(), 'binaries', binaries[platform + '_' + arch]);
+  }
+  throw new Error(`Cannot find ytdlp binary for ${platform}_${arch}`);
+
 }
