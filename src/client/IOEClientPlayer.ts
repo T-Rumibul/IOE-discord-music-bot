@@ -197,8 +197,6 @@ export class IOEClientPlayer {
                     const info = await ytdlp.getInfoAsync(new URL(urlMatch[0]).searchParams.get('v') || "", {
                         cookies: "cookies.txt"
                     }) as VideoInfo;
-                    console.log(info)
-                    await ytdlp.downloadAsync(new URL(urlMatch[0]).searchParams.get('v') || "", { cookies: "cookies.txt" });
                     
                     return {
                         url: urlMatch[0],
