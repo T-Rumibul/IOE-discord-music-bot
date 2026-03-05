@@ -1,4 +1,4 @@
-import { VideoInfo } from "ytdlp-nodejs";
+import { Stream, VideoInfo } from "ytdlp-nodejs";
 import { YTDLP, logger, regexYoutube, sanitizeString } from "../utils/index.js";
 import crypto from "crypto";
 import fs from "fs";
@@ -13,24 +13,28 @@ interface CacheEntry {
     filename: string;
     size: number;
     date: Date;
+    videoData: VideoInfo;
 }
 
 interface DownloadResult {
     path: string;
     filename: string;
+    size: number;
+    date: Date;
+    videoData: VideoInfo;
 }
 
-class DownloadsCache<K, V> extends Map<K, V> {
+class Cache<V> extends Map<string, V> {
     constructor(private chacheDir: string) {
         super();
         this.loadFromDisk();
     }
-    set(key: K, value: V): this {
+    set(key: string, value: V): this {
         super.set(key, value);
         this.writeToDisk();
         return this;
     }
-    delete(key: K): boolean {
+    delete(key: string): boolean {
         const result = super.delete(key);
         this.writeToDisk();
         return result;
@@ -45,7 +49,7 @@ class DownloadsCache<K, V> extends Map<K, V> {
             const pathToFile = path.join(this.chacheDir, "downloadsCache.json");
             if (!fs.existsSync(pathToFile)) return;
             const data = fs.readFileSync(pathToFile, "utf-8");
-            const entries: [K, V][] = JSON.parse(data);
+            const entries: [string, V][] = JSON.parse(data);
             entries.forEach(([k, v]) => super.set(k, v));
         } catch (e) {
             logger.warn("No existing cache found, starting with an empty cache.");
@@ -53,22 +57,26 @@ class DownloadsCache<K, V> extends Map<K, V> {
     }
 
 }
-export class DownloadManager {
-    private maxCacheSizeMB = 1000;
+export const downloadsDir = path.join(process.cwd(), config.DOWNLOADS_FOLDER);
+export const videoCacheDir = path.join(process.cwd(), config.DOWNLOADS_FOLDER, "video");
+export const audioCacheDir = path.join(process.cwd(), config.DOWNLOADS_FOLDER, "audio");
+class DownloadManager {
+    private maxVideoCacheSizeMB = 1000;
+    private maxAudioCacheSizeMB = 3000;
     private minCacheAgeMs = 60 * 60 * 1000; // 1 hour
     private downloadMutex = new Mutex();
     // Stores resolved cache entries
-    private downloadsCache = new DownloadsCache<string, CacheEntry>(path.join(process.cwd(), config.DOWNLOADS_FOLDER));
-
+    private videoCache = new Cache<CacheEntry>(videoCacheDir);
+    private audioCache = new Cache<CacheEntry>(audioCacheDir);
     /**
      * Public entry point. Queues a download and returns a promise that
      * resolves when the download (or cache hit) is complete.
      */
-    async download(videoURL: string): Promise<DownloadResult | null> {
+    async download(videoURL: string, type: "video" | "audio"): Promise<DownloadResult | null> {
         logger.debug(`Downloading ${videoURL}`);
         const unlock = await this.downloadMutex.lock();
         try {
-            const result = await this.executeDownload(videoURL);
+            const result = await this.executeDownload(videoURL, type);
             logger.debug(`Download complete for ${videoURL}, result: ${JSON.stringify(result)}`);
             return result;
         } catch (e) {
@@ -79,9 +87,9 @@ export class DownloadManager {
         }
     }
 
-
     private async executeDownload(
-        videoURL: string
+        videoURL: string,
+        type: "video" | "audio" = "video"
     ): Promise<DownloadResult | null> {
         try {
             const urlMatch = videoURL.match(regexYoutube);
@@ -94,22 +102,22 @@ export class DownloadManager {
                 .createHash("md5")
                 .update(videoID)
                 .digest("hex");
-
+            const cache = type === "audio" ? this.audioCache : this.videoCache;
             // Return cached entry if it exists
-            const cached = this.downloadsCache.get(cacheKey);
+            const cached = cache.get(cacheKey);
             if (cached) {
                 logger.info(`Cache hit for video ID: ${videoID}`);
                 // update access time to prevent eviction
                 cached.date = new Date();
-                return { path: cached.path, filename: cached.filename };
+                return { path: cached.path, filename: cached.filename, size: cached.size, date: cached.date, videoData: cached.videoData };
             }
 
             const info = await ytdlp.getInfoAsync(videoID) as VideoInfo;
+            
+            const filename = type === "audio" ? `${sanitizeString(info.title)}.m4a` : `${sanitizeString(info.title)}.mp4`;
+            const outputPath = type === "audio" ? path.join(audioCacheDir, filename) : path.join(videoCacheDir, filename);
 
-            const filename = `${sanitizeString(info.title)}.mp4`;
-            const outputPath = path.join(process.cwd(), config.DOWNLOADS_FOLDER, filename);
-
-            const downloadedFiles = await ytdlp
+            const downloadedFiles = type === "audio" ? await ytdlp.download(videoID, { output: outputPath }).filter("audioonly").quality("highest").type("aac").run() : await ytdlp
                 .download(videoID, { output: outputPath })
                 .filter("audioandvideo")
                 .quality("highest")
@@ -121,16 +129,17 @@ export class DownloadManager {
             const stats = fs.statSync(resolvedPath);
             const fileSizeMB = stats.size / (1024 * 1024);
 
-            this.downloadsCache.set(cacheKey, {
+            cache.set(cacheKey, {
                 path: resolvedPath,
                 filename,
                 size: fileSizeMB,
                 date: new Date(),
+                videoData: info
             });
             logger.debug(`Downloaded ${filename} (${fileSizeMB.toFixed(2)} MB)`);
-            this.enforceCacheSizeLimit();
+            this.enforceCacheSizeLimit(type);
 
-            return { path: resolvedPath, filename };
+            return { path: resolvedPath, filename, size: fileSizeMB, date: new Date(), videoData: info };
         } catch (e) {
             logger.error(e, `Error downloading ${videoURL}`);
             return null;
@@ -138,12 +147,13 @@ export class DownloadManager {
     }
 
 
-    private async enforceCacheSizeLimit(): Promise<void> {
+    private async enforceCacheSizeLimit(type : "video" | "audio"): Promise<void> {
         logger.debug("Enforcing cache size limit");
-        const entries = Array.from(this.downloadsCache.entries());
+        const maxSizeMB = type === "audio" ? this.maxAudioCacheSizeMB : this.maxVideoCacheSizeMB;
+        const entries = type === "audio" ? Array.from(this.audioCache.entries()) : Array.from(this.videoCache.entries());
 
         const totalSize = entries.reduce((sum, [, v]) => sum + v.size, 0);
-        if (totalSize <= this.maxCacheSizeMB) {
+        if (totalSize <= maxSizeMB) {
             logger.debug("Cache size limit not exceeded");
             return;
         }
@@ -158,11 +168,22 @@ export class DownloadManager {
         let runningSize = totalSize;
         for (const [key, value] of evictable) {
             logger.info(`Evicting cache entry: ${key} (${value.filename})`);
-            if (runningSize <= this.maxCacheSizeMB) break;
+            if (runningSize <= maxSizeMB) break;
             await new Promise(resolve => fs.unlink(value.path, resolve)); // delete file
             runningSize -= value.size;
-            this.downloadsCache.delete(key);
-            logger.info(`Evicted cache entry: ${key} (${value.filename})`);
+
+            (type === "audio") ? this.audioCache.delete(key) : this.videoCache.delete(key);
+
+            logger.info(`Evicted ${type} cache entry: ${key} (${value.filename})`);
         }
     }
 }
+let instance: DownloadManager;
+
+
+export const DownloadManagerSingleton = function () {
+    if (!instance) {
+        instance = new DownloadManager();
+    }
+    return instance;
+};

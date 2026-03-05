@@ -5,16 +5,29 @@ import { getConfig } from "../config.js";
 const ytdlp = new YtDlp();
 const cookiesFile = path.join(process.cwd(), 'cookies.txt')
 const config = getConfig();
+
+const pinoTransport = pino.transport({
+  targets: [
+    {
+      target: "pino-pretty",
+      options: {
+        colorize: true,
+        translateTime: "yyyy-mm-dd HH:MM:ss"
+      }
+    },
+    {
+      target: 'pino/file',
+      options: {
+        destination: path.join(process.cwd(), 'logs', 'app.log'),
+        translateTime: "yyyy-mm-dd HH:MM:ss"
+      }
+    },
+  ],
+});
+
 export const logger = pino({
   level: config.LOG_LEVEL,
-  transport: {
-    target: "pino-pretty",
-    options: {
-      colorize: true,
-      translateTime: "yyyy-mm-dd HH:MM:ss"
-    }
-  }
-});
+}, pinoTransport);
 
 /**
  * Shuffles the given array and returns the shuffled array.
@@ -183,4 +196,29 @@ export const getYtdlpBinaryPath = () => {
   }
   throw new Error(`Cannot find ytdlp binary for ${platform}_${arch}`);
 
+}
+
+
+export const checkFileURL = async (url: string) => {
+  try {
+    const response = await fetch(url, { method: 'HEAD' });
+    if (response.ok) {
+      return true;
+    } else {
+      return false;
+    }
+  } catch (error) {
+    return false;
+  }
+}
+
+
+export const msToMinutesAndSeconds = (ms: number) => {
+  var minutes = Math.floor(ms / 60000);
+  var seconds = (ms % 60000) / 1000;
+  return (
+    seconds == 60 ?
+      (minutes + 1) + ":00" :
+      minutes + ":" + (seconds < 10 ? "0" : "") + seconds
+  );
 }

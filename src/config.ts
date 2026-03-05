@@ -19,5 +19,7 @@ export function getConfig() {
     HOST: process.env.HOST!,
     PORT: process.env.PORT!,
     LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+    PLAYER_GIF_IDLE: process.env.PLAYER_GIF_IDLE || '',
+    PLAYER_GIF_PLAYING: process.env.PLAYER_GIF_PLAYING || '',
   }
 }

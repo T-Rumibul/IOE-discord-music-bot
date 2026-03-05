@@ -5,11 +5,11 @@ import { logger, sleep } from '../utils/index.js'
 import { IOEClientEvents } from './IOEClientEvents.js';
 import { IOEClientDatabase } from './IOEClientDatabase.js';
 import { IOECLientCommands } from './IOEClientCommands.js';
-import { IOEClientPlayer } from './IOEClientPlayer.js';
+import { IOEClientPlayback } from './IOEClientPlayback.js';
 export class IOEClient extends Client {
   private eventsHandler = new IOEClientEvents(this);
   commands = new IOECLientCommands(this);
-  public player = new IOEClientPlayer(this);
+  public player = new IOEClientPlayback(this);
   public logger = logger;
   public db = new IOEClientDatabase(this);
   /**

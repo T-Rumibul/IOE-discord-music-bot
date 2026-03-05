@@ -1,4 +1,4 @@
-import type { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction, Interaction, SlashCommandBuilder } from "discord.js";
 import path from "path";
 import fs from 'fs';
 import { pathToFileURL } from "url";
@@ -106,7 +106,8 @@ export class IOECLientCommands {
      * If the command doesn't exist, it does nothing.
      * @param {ChatInputCommandInteraction} interaction - The interaction to invoke the command with.
      */
-    invokeCommand(interaction: ChatInputCommandInteraction) {
+    invokeCommand(interaction: Interaction) {
+        if (!interaction.isChatInputCommand()) return;
         const command = this.commands.get(interaction.commandName);
         if (command) {
             command.handler(this.client, interaction);

@@ -6,7 +6,7 @@ import crypto from 'crypto'
 const config = getConfig();
 const app = express();
 const downloadsDir = path.join(process.cwd(), config.DOWNLOADS_FOLDER);
-
+const videoDir = path.join(process.cwd(), config.DOWNLOADS_FOLDER, "video");
 const accessKeys = new Map()
 /**
  * Creates an access key for a downloaded video.
@@ -24,7 +24,7 @@ export function createAccessKey(ttl: number, filename: string) {
     return key
 }
 // Simple middleware to prevent public access to all files
-app.all('/*path', (req, res, next) => {
+app.all('/downloads/*path', (req, res, next) => {
     const key = req.query.key
     if (!key) {
         res.status(403).send('Forbidden')
@@ -46,8 +46,8 @@ app.all('/*path', (req, res, next) => {
     }
     next()
 })
-app.use('/downloads', express.static(downloadsDir));
-
+app.use('/downloads', express.static(videoDir));
+app.use('/public', express.static(path.join(process.cwd(), 'public')));
 export function startServer() {
     return new Promise<void>((resolve) => {
         app.listen(config.PORT, () => {

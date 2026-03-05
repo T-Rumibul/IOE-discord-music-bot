@@ -10,10 +10,10 @@ import path from 'path';
 import { getConfig } from '../../config.js';
 import { defineCommand } from '../IOEClientCommands.js';
 import type {IOEClient} from '../IOEClient.js';
-import { DownloadManager } from '../../misc/DownloadManager.js';
+import { DownloadManagerSingleton } from '../../misc/DownloadManager.js';
 import { createAccessKey } from '../../server.js';
 const config = getConfig();
-const downloadManager = new DownloadManager();
+const downloadManager = DownloadManagerSingleton();
 
 const command = new SlashCommandBuilder();
 command.setName('download');
@@ -47,13 +47,13 @@ async function execute(
       return;
     }
     await interaction.reply({ content: 'Processing your request...', flags: MessageFlags.Ephemeral });
-    const downloadedFiles = await downloadManager.download(URL);
+    const downloadedFiles = await downloadManager.download(URL, 'video');
     if (!downloadedFiles) {
       await interaction.editReply({ content: 'Failed to download the video. Please make sure the URL is correct and try again.'});
       return;
     }
     const key = createAccessKey(60* 60 * 1000, downloadedFiles.filename)
-    await interaction.editReply({ content: `Video downloaded successfully: http://${config.HOST}:${config.PORT}/downloads/${encodeURIComponent(downloadedFiles.filename)}?key=${key}` });
+    await interaction.editReply({ content: `Video downloaded successfully: ${config.HOST}:${config.PORT}/downloads/${encodeURIComponent(downloadedFiles.filename)}?key=${key}` });
     
   } catch (e) {
     client.logger.error(e, 'Error executing play command');
