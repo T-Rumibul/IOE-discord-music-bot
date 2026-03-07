@@ -2,6 +2,7 @@ import pino from "pino"
 import path from "path";
 import { Download, FormatOptions, PlaylistInfo, QualityOptions, Stream, VideoInfo, YtDlp, YtDlpOptions } from "ytdlp-nodejs";
 import { getConfig } from "../config.js";
+import { binariesMapping } from "./ytdlpBinaries.js";
 const ytdlp = new YtDlp();
 const cookiesFile = path.join(process.cwd(), 'cookies.txt')
 const config = getConfig();
@@ -182,17 +183,11 @@ export class Mutex {
 
 
 export const getYtdlpBinaryPath = () => {
-  const binaries: Record<string, string> = {
-    win32_x64: 'yt-dlp.exe',
-    linux_x64: 'yt-dlp_linux',
-    linux_arm64: 'yt-dlp_linux_aarch64',
-    win32_arm64: 'yt-dlp_arm64.exe'
-  }
   const arch = process.arch;
   const platform = process.platform;
 
-  if (binaries[platform + '_' + arch]) {
-    return path.join(process.cwd(), 'binaries', binaries[platform + '_' + arch]);
+  if (binariesMapping[platform + '_' + arch]) {
+    return path.join(process.cwd(), 'binaries', binariesMapping[platform + '_' + arch]);
   }
   throw new Error(`Cannot find ytdlp binary for ${platform}_${arch}`);
 
