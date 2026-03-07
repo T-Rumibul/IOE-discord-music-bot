@@ -9,13 +9,11 @@ import { buttons, generateEmbed } from './playback/Misc.js'
 
 
 
-const downloadManager = DownloadManagerSingleton();
-
-
 export class IOEClientPlayback {
     private queue = new PlayerQueue();
     private guildPlayers: Map<string, AudioPlayer> = new Map();
     private lock: Mutex = new Mutex();
+    private downloadManager = DownloadManagerSingleton()
     constructor(private client: IOEClient) { }
     /**
      * Creates an AudioPlayer instance for a given guild ID.
@@ -117,6 +115,7 @@ export class IOEClientPlayback {
             }
             case 'next': {
                 if (queue.current?.repeat) queue.toggleRepeat();
+                // Logic is handled by player stateChange event callback
                 player.stop();
                 interaction.update({});
                 break;
@@ -272,7 +271,7 @@ export class IOEClientPlayback {
     private async extract(data: string | Attachment, member: GuildMember, channel: GuildTextBasedChannel): Promise<QueueItem | undefined> {
         try {
             if (typeof data === 'string') {
-                const downloadResult = await downloadManager.download(data, 'audio');
+                const downloadResult = await this.downloadManager.download(data, 'audio');
                 if (!downloadResult) return;
                 return {
                     path: downloadResult.path,

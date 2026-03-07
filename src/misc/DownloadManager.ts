@@ -1,4 +1,4 @@
-import { Stream, VideoInfo } from "ytdlp-nodejs";
+import { VideoInfo } from "ytdlp-nodejs";
 import { YTDLP, logger, regexYoutube, sanitizeString } from "../utils/index.js";
 import crypto from "crypto";
 import fs from "fs";
@@ -6,7 +6,6 @@ import path from "path";
 import { Mutex } from "../utils/index.js";
 import { getConfig } from '../config.js';
 const config = getConfig();
-const ytdlp = new YTDLP();
 
 interface CacheEntry {
     path: string;
@@ -68,6 +67,7 @@ class DownloadManager {
     // Stores resolved cache entries
     private videoCache = new Cache<CacheEntry>(videoCacheDir);
     private audioCache = new Cache<CacheEntry>(audioCacheDir);
+    private ytdlp = new YTDLP()
     /**
      * Public entry point. Queues a download and returns a promise that
      * resolves when the download (or cache hit) is complete.
@@ -112,12 +112,12 @@ class DownloadManager {
                 return { path: cached.path, filename: cached.filename, size: cached.size, date: cached.date, videoData: cached.videoData };
             }
 
-            const info = await ytdlp.getInfoAsync(videoID) as VideoInfo;
+            const info = await this.ytdlp.getInfoAsync(videoID) as VideoInfo;
             
             const filename = type === "audio" ? `${sanitizeString(info.title)}.m4a` : `${sanitizeString(info.title)}.mp4`;
             const outputPath = type === "audio" ? path.join(audioCacheDir, filename) : path.join(videoCacheDir, filename);
 
-            const downloadedFiles = type === "audio" ? await ytdlp.download(videoID, { output: outputPath }).filter("audioonly").quality("highest").type("aac").run() : await ytdlp
+            const downloadedFiles = type === "audio" ? await this.ytdlp.download(videoID, { output: outputPath }).filter("audioonly").quality("highest").type("aac").run() : await this.ytdlp
                 .download(videoID, { output: outputPath })
                 .filter("audioandvideo")
                 .quality("highest")
