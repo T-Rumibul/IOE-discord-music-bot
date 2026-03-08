@@ -1,17 +1,16 @@
-import type { Guild, GuildMember, GuildTextBasedChannel, Message, TextChannel } from 'discord.js'
-import { ChannelType, Client, IntentsBitField, PermissionFlagsBits } from 'discord.js';
+import type { GuildMember, GuildTextBasedChannel, Message, } from 'discord.js'
+import { ChannelType, Client, IntentsBitField } from 'discord.js';
 
-import { logger, sleep } from '../utils/index.js'
+import { logger } from '../utils/index.js'
 import { IOEClientEvents } from './IOEClientEvents.js';
 import { IOEClientDatabase } from './IOEClientDatabase.js';
-import { IOECLientCommands } from './IOEClientCommands.js';
+import { IOEClientCommands } from './IOEClientCommands.js';
 import { IOEClientPlayback } from './IOEClientPlayback.js';
 export class IOEClient extends Client {
-  private eventsHandler = new IOEClientEvents(this);
-  commands = new IOECLientCommands(this);
-  public player = new IOEClientPlayback(this);
-  public logger = logger;
-  public db = new IOEClientDatabase(this);
+  private readonly eventsHandler = new IOEClientEvents(this);
+  public readonly commands = new IOEClientCommands(this);
+  public readonly player = new IOEClientPlayback(this);
+  public readonly db = new IOEClientDatabase();
   /**
    * Constructs an instance of the IOEClient class.
    * @remarks
@@ -34,7 +33,7 @@ export class IOEClient extends Client {
     });
 
     this.token = token;
-    this.logger.info('IOEClient initialized.');
+    logger.info('IOEClient initialized.');
   }
   /**
    * A hook that is called before the bot logs in.
@@ -48,157 +47,42 @@ export class IOEClient extends Client {
   }
   public async login(): Promise<string> {
     await this.beforeLogin();
-    return await super.login();
-
-  }
-  /**
-   * Checks if a member has the administrator permission or any of the roles specified in `adminRoles`.
-   * @param {GuildMember} member - The member to check.
-   * @returns {boolean} True if the member is an administrator, false otherwise.
-   */
-  isAdmin(member: GuildMember) {
-    if (this.isOwner(member)) return true;
-    if (member.permissions.has(PermissionFlagsBits.Administrator, true)) {
-      return true;
-    }
-    const adminRoles: unknown[] = [];
-    if (adminRoles.length > 0) {
-      if (member.roles.cache.find(r => adminRoles.indexOf(r.id) !== -1)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  /**
-   * Checks if a member has the moderator role or any of the roles specified in `modRoles`.
-   * @param {GuildMember} member - The member to check.
-   * @returns {boolean} True if the member is a moderator, false otherwise.
-   */
-  isMod(member: GuildMember) {
-    const modRoles: unknown[] = [];
-    if (this.isAdmin(member)) return true;
-    if (modRoles.length > 0) {
-      if (member.roles.cache.find(r => modRoles.indexOf(r.id) !== -1)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  /**
-   * Checks if a member is the owner of the guild.
-   * @param {GuildMember} member - The member to check.
-   * @returns {boolean} True if the member is the owner, false otherwise.
-   */
-  isOwner(member: GuildMember) {
-    if (member.id === member.guild.ownerId) {
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Gets a guild member from a mention string.
-   * @param {string} mention - The mention string to parse the member ID from.
-   * @param {Guild} guild - The guild to fetch the member from.
-   * @returns {Promise<GuildMember | null>} The guild member if found, null otherwise.
-   */
-  async getMemberFromMentions(mention: string, guild: Guild) {
-    try {
-      const usedID = mention.replace(/([^0-9])+/g, '');
-      const member = await guild.members.fetch(usedID);
-      return member;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Gets a guild text channel from a mention string.
-   * @param {string} mention - The mention string to parse the channel ID from.
-   * @param {Guild} guild - The guild to fetch the channel from.
-   * @returns {Promise<TextChannel | null>} The guild text channel if found, null otherwise.
-   */
-  async getChannelFromMentions(mention: string, guild: Guild) {
-    try {
-      const channelID = mention.replace(/([^0-9])+/g, '');
-      const channel = await guild.channels.fetch(channelID);
-      if (channel && channel.type !== ChannelType.GuildText) return null;
-      return channel;
-    } catch {
-      return null;
-    }
+    return super.login();
   }
   /**
    * Deletes a message after a specified timeout.
    * @param {Message} message - The message to delete.
    * @param {number} timeout - The timeout in milliseconds.
    */
-  async deleteMessageTimeout(message: Message, timeout: number) {
+  deleteMessageTimeout(message: Message, timeout: number) {
     setTimeout(async () => {
       try {
-        if (!message || message.channel.type !== ChannelType.GuildText) return;
-        const msg = await message.channel.messages.cache.get(message.id);
-        if (!msg) return;
-        if (msg.deletable) {
-          msg.delete();
+        if (message.channel.type !== ChannelType.GuildText) return;
+        if (message.deletable) {
+          await message.delete();
         }
       } catch (e) {
-        logger.error(`Message delete error`);
-        logger.error(e);
+        logger.error(e, `Message delete error:`);
       }
     }, timeout);
-  }
-
-  /**
-   * Deletes all messages in a channel.
-   * If the bulkDelete fails, it will delete messages one by one.
-   * @param {TextChannel} channel - The channel to delete messages from.
-   * @returns {Promise<void>}
-   */
-  async deleteAllMessages(channel: TextChannel) {
-    try {
-      await channel.bulkDelete(
-        (
-          await channel.messages.fetch({
-            cache: true,
-          })
-        ).size
-      );
-    } catch (err) {
-      // Try to delete messages one by one if bulkDelete fails
-      const messagesCollection = await channel.messages.fetch({
-        cache: true
-      })
-      const messages = messagesCollection.values()
-      for (let msg of messages) {
-        if (msg.deletable) await msg.delete()
-        else {
-          await channel.send(
-            '⚠ **Message deletion failed**'
-          );
-          return;
-        }
-        await sleep(1);
-      }
-    }
   }
   /**
    * Sends a mention to a guild member in a guild text channel.
    * The mention is sent as a message with the content specified.
    * If a timeout is specified, the message will be deleted after the timeout.
-   * @param {TextChannel} channel - The channel to send the mention to.
+   * @param {GuildTextBasedChannel} channel - The channel to send the mention to.
    * @param {string} content - The content of the message to send.
    * @param {GuildMember} member - The guild member to mention.
    * @param {number} [timeout] - The timeout in milliseconds.
    */
   async sendMention(channel: GuildTextBasedChannel, content: string, member: GuildMember, timeout?: number) {
     try {
-      const msg = await channel.send(`<@!${member.id}>, ${content}`);
+      const msg = await channel.send(`<@${member.id}>, ${content}`);
       if (timeout) {
         this.deleteMessageTimeout(msg, timeout);
       }
     } catch (e) {
-      this.logger.error(e, `Error sending mention in guild ${channel.guild.name}`);
+      logger.error(e, `Error sending mention in guild ${channel.guild.name}`);
     }
   }
 }
