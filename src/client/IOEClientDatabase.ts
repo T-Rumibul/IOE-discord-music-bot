@@ -3,7 +3,7 @@ import sqlite3 from 'sqlite3'
 import { open, Database } from 'sqlite'
 import { SQL } from 'sql-template-strings';
 import path from 'path';
-
+import { logger } from '../utils/index.js'
 const dbPath = path.join(import.meta.dirname, '..', '..', '/database.db');
 
 // open the database
@@ -15,7 +15,7 @@ const db = await open({
 await db.exec('CREATE TABLE IF NOT EXISTS guilds (guild_id TEXT, music_channel TEXT, PRIMARY KEY(guild_id))');
 export class IOEClientDatabase {
   private db: Database<sqlite3.Database, sqlite3.Statement> = db;
-  constructor(private client: IOEClient) {
+  constructor() {
   }
 
   /**
@@ -29,7 +29,7 @@ export class IOEClientDatabase {
       const musicChannel = await this.db.get<{ music_channel: string }>(SQL`SELECT music_channel FROM guilds WHERE guild_id = ${guildId}`)
       return musicChannel ? musicChannel.music_channel : null;
     } catch (e) {
-      this.client.logger.error(e);
+      logger.error(e);
       return null;
     }
   }
@@ -44,7 +44,7 @@ export class IOEClientDatabase {
       await this.db.run(SQL`INSERT INTO guilds (guild_id, music_channel) VALUES (${guildId}, ${channelId})
       ON CONFLICT(guild_id) DO UPDATE SET music_channel = ${channelId}`);
     } catch (e) {
-      this.client.logger.error(e);
+      logger.error(e);
     }
   }
 
@@ -62,7 +62,7 @@ export class IOEClientDatabase {
       }
       return musicChannels;
     } catch (e) {
-      this.client.logger.error(e);
+      logger.error(e);
       return new Map();
     }
   }

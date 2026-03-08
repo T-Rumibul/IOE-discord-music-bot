@@ -5,6 +5,7 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
 } from 'discord.js';
+import { logger } from '../../utils/index.js';
 
 const command = new SlashCommandBuilder();
 command.setName('invite');
@@ -22,9 +23,8 @@ async function execute(
     await interaction.reply(
       `https://discord.com/api/oauth2/authorize?client_id=${client.user?.id}&permissions=8&scope=bot`
     );
-    // client.utils.deleteMessageTimeout(resp, 5000)
   } catch (e) {
-    client.logger.error(e, 'Invite command error');
+    logger.error(e, 'Invite command error');
   }
 }
 

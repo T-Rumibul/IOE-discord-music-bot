@@ -8,6 +8,7 @@ import {
   SlashCommandStringOption,
   SlashCommandSubcommandBuilder,
 } from 'discord.js';
+import { logger } from '../../utils/index.js';
 
 const command = new SlashCommandBuilder();
 command.setName('play');
@@ -59,7 +60,7 @@ async function execute(
     await client.player.play(guildMember, channel, data)
     
   } catch (e) {
-    client.logger.error(e, 'Error executing play command');
+    logger.error(e, 'Error executing play command');
   }
 }
 

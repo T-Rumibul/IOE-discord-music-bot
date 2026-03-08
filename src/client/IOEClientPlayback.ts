@@ -62,7 +62,7 @@ export class IOEClientPlayback {
 
             return player;
         } catch (e) {
-            this.client.logger.error(e, 'Error creating player');
+            logger.error(e, 'Error creating player');
             return null;
         }
 
@@ -149,7 +149,7 @@ export class IOEClientPlayback {
     async play(member: GuildMember, channel: GuildTextBasedChannel, data: string | Attachment) {
 
         try {
-            this.client.logger.info(`Play command called in guild ${member.guild?.name}`);
+            logger.info(`Play command called in guild ${member.guild?.name}`);
             const guildId = member.guild.id;
             const channelId = member.voice.channelId;
             if (!channelId) {
@@ -195,7 +195,7 @@ export class IOEClientPlayback {
             await channel.send({ components: [buttons], embeds: [embed] });
 
         } catch (e) {
-            this.client.logger.error(e, `Error in play method in guild ${member.guild?.name}`);
+            logger.error(e, `Error in play method in guild ${member.guild?.name}`);
         }
     }
     /**
@@ -227,7 +227,7 @@ export class IOEClientPlayback {
             }
             throw new Error('Unsupported queue item type');
         } catch (e) {
-            this.client.logger.error(e, `Error creating audio resource for ${queueItem.title}`);
+            logger.error(e, `Error creating audio resource for ${queueItem.title}`);
             return null;
         }
     }
@@ -255,7 +255,7 @@ export class IOEClientPlayback {
             }
             return connection;
         } catch (e) {
-            this.client.logger.error(e, `Error connecting to voice channel in guild ${member.guild.id}`);
+            logger.error(e, `Error connecting to voice channel in guild ${member.guild.id}`);
             return;
         }
     }
@@ -296,7 +296,7 @@ export class IOEClientPlayback {
 
 
         } catch (e) {
-            this.client.logger.error(e, `Error while extracting song in guild ${member.guild?.name}`);
+            logger.error(e, `Error while extracting song in guild ${member.guild?.name}`);
             return;
         }
     }

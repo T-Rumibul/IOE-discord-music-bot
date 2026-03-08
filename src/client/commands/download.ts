@@ -12,6 +12,8 @@ import { defineCommand } from '../IOEClientCommands.js';
 import type {IOEClient} from '../IOEClient.js';
 import { DownloadManagerSingleton } from '../../misc/DownloadManager.js';
 import { createAccessKey } from '../../server.js';
+import { logger } from '../../utils/index.js';
+
 const config = getConfig();
 const downloadManager = DownloadManagerSingleton();
 
@@ -56,7 +58,7 @@ async function execute(
     await interaction.editReply({ content: `Video downloaded successfully: ${config.HOST}:${config.PORT}/downloads/${encodeURIComponent(downloadedFiles.filename)}?key=${key}` });
     
   } catch (e) {
-    client.logger.error(e, 'Error executing play command');
+    logger.error(e, 'Error executing play command');
   }
 }
 

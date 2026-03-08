@@ -4,10 +4,10 @@ import {
   ChannelType,
   ChatInputCommandInteraction,
   PermissionFlagsBits,
-  SlashCommandAttachmentOption,
   SlashCommandBuilder,
   SlashCommandNumberOption,
 } from 'discord.js';
+import { logger } from '../../utils/index.js';
 
 const command = new SlashCommandBuilder();
 command.setName('clear');
@@ -27,15 +27,18 @@ async function execute(
 ) {
   try {
     if (interaction.channel?.type !== ChannelType.GuildText) return;
-    const {channel} = interaction;
+    const {channel, memberPermissions} = interaction;
     const amount = interaction.options.get('number', true).value;
     if (typeof amount !== 'number') return;
-
+    if(!memberPermissions?.has(PermissionFlagsBits.Administrator, true)) {
+      await interaction.reply({ content: 'You need to be an admin to use this command.', ephemeral: true });
+      return
+    }
     const deleted = await channel.bulkDelete(Number(amount), true);
 
     await interaction.reply({ content: `Removed **${deleted.size}** messages.`, ephemeral: true });
   } catch (e) {
-    client.logger.error(e, 'Clear command error');
+    logger.error(e, 'Clear command error');
   }
 }
 
