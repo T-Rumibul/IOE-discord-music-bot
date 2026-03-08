@@ -2,10 +2,8 @@ import { ClientEvents } from "discord.js";
 import type { IOEClient } from "./IOEClient.js";
 import fs from 'fs';
 import path from "path";
-import { createRequire } from 'module';
 import { pathToFileURL } from "url";
-import { Key } from "readline";
-
+import { logger, Mutex } from '../utils/index.js'
 const clientEventNames = [
     'applicationCommandPermissionsUpdate',
     'autoModerationActionExecution',
@@ -99,97 +97,8 @@ const clientEventNames = [
 
 type ClientEventName = (typeof clientEventNames)[number];
 
-/**
- * Checks if a given string is a valid ClientEvents event name.
- * @param {string} name - The string to check.
- * @returns {boolean} True if the string is a valid ClientEvents event name, false otherwise.
- * @example
- * isClientEventName('ready') // true
- * isClientEventName('foo') // false
- */
-function isClientEventName(name: string): name is ClientEventName {
-    return (clientEventNames as readonly string[]).includes(name);
-}
-
-export class IOEClientEvents {
-    private callbacks = new Map<keyof ClientEvents, Event<keyof ClientEvents>>();
-    private initialized = false;
-
-
-
-    /**
-     * Constructs an instance of the IOEClientEvents class.
-     * @param {IOEClient} client - The IOEClient instance to attach the events to.
-     */
-    constructor(private client: IOEClient) {
-    }
-
-/**
- * Initializes the event handlers by reading all the files in the events directory and
- * importing the default export of each file. The default export of each file must be an
- * instance of the Event class.
- * @throws {Error} If an event file does not correspond to a valid ClientEvents event name
- * or if an event file does not export a class named Event.
- * 
- * @example
- * import { defineEventHandler } from "../IOEClientEvents.js";
- *
- * export default defineEventHandler<"clientReady">((client) => {
- *     client.logger.info(`Logged in as ${client.user?.tag}!`);
- * }, { once: true });
- */
-    private async init() {
-        const eventsDir = path.resolve(import.meta.dirname, 'events');
-        const files = fs.readdirSync(eventsDir)
-        for (const file of files) {
-            const eventName = file.split('.')[0]
-
-            if (!isClientEventName(eventName)) {
-                throw new Error(`Event file "${file}" does not correspond to a valid ClientEvents event name, see IOEClientEvents.ts clientEventNames variable for reference.`);
-            }
-
-            const mod = await import(pathToFileURL(path.join(eventsDir, file)).href);
-            if (!(mod.default instanceof Event)) {
-                throw new Error(
-                    `Event file "${file}" must default export a class named Event. This can be done by using defineEventHandler, 
-                    Example: import { defineEventHandler } from "../IOEClientEvents.js";
-
-                    export default defineEventHandler<"clientReady">((client) => {
-                    client.logger.info(\`Logged in as \$\{client.user?.tag\}!\`);
-  
-                    }, { once: true });`);
-            }
-            this.callbacks.set(eventName, mod.default as Event<keyof ClientEvents>);
-
-
-        }
-        this.initialized = true
-    }
-    /**
-     * Registers all the event handlers from the events directory.
-     * 
-     * If the event handler's once property is set to true, the event handler will be registered
-     * with the client's once method. Otherwise, it will be registered with the client's on method.
-     */
-    async registerEvents() {
-        if (!this.initialized) await this.init();
-        for (const [eventName, event ] of this.callbacks) {
-            if (!event.options.once) {
-                this.client.on(eventName, (...args: ClientEvents[keyof ClientEvents]) => {
-                    event.handler(this.client, ...args);
-                })
-            } else {
-                this.client.once(eventName, (...args: ClientEvents[keyof ClientEvents]) => {
-                    event.handler(this.client, ...args);
-                })
-            }
-        }
-    }
-}
-
-
 type EventHandler<K extends keyof ClientEvents> =
-    (client: IOEClient, ...args: ClientEvents[K]) => void;
+    (client: IOEClient, ...args: ClientEvents[K]) => Promise<void> | void;
 
 type EventOptions = {
     once?: boolean;
@@ -208,6 +117,108 @@ class Event<K extends keyof ClientEvents> {
         once: false
     }) { }
 }
+
+/**
+ * Checks if a given string is a valid ClientEvents event name.
+ * @param {string} name - The string to check.
+ * @returns {boolean} True if the string is a valid ClientEvents event name, false otherwise.
+ * @example
+ * isClientEventName('ready') // true
+ * isClientEventName('foo') // false
+ */
+function isClientEventName(name: string): name is ClientEventName {
+    return (clientEventNames as readonly string[]).includes(name);
+}
+
+export class IOEClientEvents {
+    private callbacks = new Map<keyof ClientEvents, Event<keyof ClientEvents>>();
+    private loaded = false;
+    private readonly loadMutex = new Mutex();
+
+
+    /**
+     * Constructs an instance of the IOEClientEvents class.
+     * @param {IOEClient} client - The IOEClient instance to attach the events to.
+     */
+    constructor(private client: IOEClient) {
+    }
+
+    /**
+     * Initializes the event handlers by reading all the files in the events directory and
+     * importing the default export of each file. The default export of each file must be an
+     * instance of the Event class.
+     * @throws {Error} If an event file does not correspond to a valid ClientEvents event name
+     * or if an event file does not export a class named Event.
+     * 
+     * @example
+     * import { defineEventHandler } from "../IOEClientEvents.js";
+     *
+     * export default defineEventHandler<"clientReady">((client) => {
+     *     client.logger.info(`Logged in as ${client.user?.tag}!`);
+     * }, { once: true });
+     */
+    private async load() {
+        const unlock = await this.loadMutex.lock();
+        try {
+            if (this.loaded) return
+            const eventsDir = path.resolve(import.meta.dirname, 'events');
+            const files = fs.readdirSync(eventsDir).filter(file => file.endsWith('.ts') || file.endsWith('.js'));
+            for (const file of files) {
+                const eventName = file.split('.')[0]
+
+                if (!isClientEventName(eventName)) {
+                    throw new Error(`Event file "${file}" does not correspond to a valid ClientEvents event name, see IOEClientEvents.ts clientEventNames variable for reference.`);
+                }
+
+                const mod = await import(pathToFileURL(path.join(eventsDir, file)).href);
+                if (!(mod.default instanceof Event)) {
+                    throw new Error(
+                        `Event file "${file}" must default export a class named Event. This can be done by using defineEventHandler, 
+                    Example: import { defineEventHandler } from "../IOEClientEvents.js";
+
+                    export default defineEventHandler<"clientReady">((client) => {
+                    client.logger.info(\`Logged in as \$\{client.user?.tag\}!\`);
+  
+                    }, { once: true });`);
+                }
+                this.callbacks.set(eventName, mod.default as Event<keyof ClientEvents>);
+
+
+            }
+            this.loaded = true
+        } catch (e) {
+            logger.error(e, 'Error loading events');
+            this.callbacks.clear();
+            throw e;
+        } finally {
+            unlock();
+        }
+    }
+    /**
+     * Registers all the event handlers from the events directory.
+     * 
+     * If the event handler's once property is set to true, the event handler will be registered
+     * with the client's once method. Otherwise, it will be registered with the client's on method.
+     */
+    async registerEvents() {
+        if (!this.loaded) await this.load();
+        for (const [eventName, event] of this.callbacks) {
+            const method = event.options.once ? 'once' : 'on';
+
+            this.client[method](eventName, async (...args: ClientEvents[keyof ClientEvents]) => {
+                try {
+                    await event.handler(this.client, ...args);
+                } catch (e) {
+                    logger.error(e, `Error invoking event ${eventName}`);
+                }
+            })
+
+        }
+    }
+}
+
+
+
 
 
 /**
