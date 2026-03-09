@@ -1,6 +1,6 @@
 {
   "name": "ioe-discord-music-bot",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "",
   "homepage": "https://github.com/T-Rumibul/IOE-discord-music-bot#readme",
   "bugs": {
@@ -10,10 +10,10 @@
     "type": "git",
     "url": "git+https://github.com/T-Rumibul/IOE-discord-music-bot.git"
   },
-  "license": "ISC",
-  "author": "",
+  "license": "MIT",
+  "author": "T-Rumibul",
   "type": "module",
-  "main": "index.js",
+  "main": "main.js",
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "prebuild": "node buildScripts/cleanDist.js",
