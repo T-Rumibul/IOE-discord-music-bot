@@ -32,11 +32,8 @@ export class IOEClientPlayback {
                 if (newState.status === AudioPlayerStatus.Idle && oldState.status !== AudioPlayerStatus.Idle) {
                     const connection = getVoiceConnection(guildId);
                     const queue = this.queue.get(guildId);
+                    
                     if (!connection) return;
-                    if (queue.isEmpty()) {
-                        connection.destroy();
-                        return;
-                    }
                     const nextItem = queue.getNext();
 
                     if (!nextItem) {
