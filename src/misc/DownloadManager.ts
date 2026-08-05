@@ -1,4 +1,4 @@
-import { VideoInfo } from "ytdlp-nodejs";
+import { DownloadFinishResult, VideoInfo } from "ytdlp-nodejs";
 import { YTDLP, logger, regexYoutube, sanitizeString } from "../utils/index.js";
 import crypto from "crypto";
 import fs from "fs";
@@ -24,7 +24,7 @@ interface DownloadResult {
 }
 
 class Cache<V> extends Map<string, V> {
-    constructor(private chacheDir: string) {
+    constructor(private cacheDir: string) {
         super();
         this.loadFromDisk();
     }
@@ -41,11 +41,11 @@ class Cache<V> extends Map<string, V> {
     private writeToDisk() {
         const entries = Array.from(this.entries());
         const data = JSON.stringify(entries);
-        fs.writeFileSync(path.join(this.chacheDir, "downloadsCache.json"), data);
+        fs.writeFileSync(path.join(this.cacheDir, "downloadsCache.json"), data);
     }
     private loadFromDisk() {
         try {
-            const pathToFile = path.join(this.chacheDir, "downloadsCache.json");
+            const pathToFile = path.join(this.cacheDir, "downloadsCache.json");
             if (!fs.existsSync(pathToFile)) return;
             const data = fs.readFileSync(pathToFile, "utf-8");
             const entries: [string, V][] = JSON.parse(data);
@@ -109,20 +109,27 @@ class DownloadManager {
                 logger.info(`Cache hit for video ID: ${videoID}`);
                 // update access time to prevent eviction
                 cached.date = new Date();
+                cache.set(cacheKey, cached);
                 return { path: cached.path, filename: cached.filename, size: cached.size, date: cached.date, videoData: cached.videoData };
             }
 
             const info = await this.ytdlp.getInfoAsync(videoID) as VideoInfo;
-            
-            const filename = type === "audio" ? `${sanitizeString(info.title)}.m4a` : `${sanitizeString(info.title)}.mp4`;
-            const outputPath = type === "audio" ? path.join(audioCacheDir, filename) : path.join(videoCacheDir, filename);
-
-            const downloadedFiles = type === "audio" ? await this.ytdlp.download(videoID, { output: outputPath }).filter("audioonly").quality("highest").type("aac").run() : await this.ytdlp
-                .download(videoID, { output: outputPath })
-                .filter("audioandvideo")
-                .quality("highest")
-                .type("mp4")
-                .run();
+            let filename: string;
+            let outputPath: string;
+            switch (type) {
+                case "audio":
+                    filename = `${sanitizeString(info.title)}.m4a`;
+                    outputPath = path.join(audioCacheDir, filename);
+                    break;
+                case "video":
+                    filename = `${sanitizeString(info.title)}.mp4`;
+                    outputPath = path.join(videoCacheDir, filename);
+                    break;
+                default:
+                    throw new Error(`Unsupported download type: ${type}`);
+            }
+           
+            const downloadedFiles = await this.downloadFiles(videoID, type, outputPath);
 
             const resolvedPath = downloadedFiles.filePaths[0];
 
@@ -137,7 +144,7 @@ class DownloadManager {
                 videoData: info
             });
             logger.debug(`Downloaded ${filename} (${fileSizeMB.toFixed(2)} MB)`);
-            this.enforceCacheSizeLimit(type);
+            await this.enforceCacheSizeLimit(type);
 
             return { path: resolvedPath, filename, size: fileSizeMB, date: new Date(), videoData: info };
         } catch (e) {
@@ -145,7 +152,18 @@ class DownloadManager {
             return null;
         }
     }
-
+    private async downloadFiles(videoID: string, type: "video" | "audio" = 'audio', outputPath: string): Promise<DownloadFinishResult> {
+        if (type === "video") {
+           return this.ytdlp
+                .download(videoID, { output: outputPath })
+                .filter("audioandvideo")
+                .quality("highest")
+                .type("mp4")
+                .run();
+        }
+        return this.ytdlp.download(videoID, { output: outputPath }).filter("audioonly").quality("highest").type("aac").run()
+        
+    }
 
     private async enforceCacheSizeLimit(type : "video" | "audio"): Promise<void> {
         logger.debug("Enforcing cache size limit");
@@ -169,7 +187,7 @@ class DownloadManager {
         for (const [key, value] of evictable) {
             logger.info(`Evicting cache entry: ${key} (${value.filename})`);
             if (runningSize <= maxSizeMB) break;
-            await new Promise(resolve => fs.unlink(value.path, resolve)); // delete file
+            await fs.promises.unlink(value.path).catch(err => logger.error(err, `Failed to delete file: ${value.path}`));
             runningSize -= value.size;
 
             (type === "audio") ? this.audioCache.delete(key) : this.videoCache.delete(key);
