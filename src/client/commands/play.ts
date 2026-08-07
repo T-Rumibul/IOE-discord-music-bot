@@ -33,7 +33,17 @@ queryOption.setRequired(true);
 querySubCommand.setName('query');
 querySubCommand.setDescription('Play a song from a search query or URL');
 querySubCommand.addStringOption(queryOption);
+const gotoSubCommand = new SlashCommandSubcommandBuilder();
+const gotoOption = new SlashCommandStringOption();
+gotoOption.setName('goto');
+gotoOption.setDescription('Go to a specific time in the song');
+gotoOption.setRequired(false);
 
+gotoSubCommand.setName('goto');
+gotoSubCommand.setDescription('Go to a specific time in the song');
+gotoSubCommand.addStringOption(gotoOption);
+
+command.addSubcommand(gotoSubCommand);
 command.addSubcommand(attachmentSubCommand);
 command.addSubcommand(querySubCommand);
 
@@ -44,8 +54,13 @@ async function execute(
   try {
     if (interaction.channel?.type !== ChannelType.GuildText) return;
     const {channel, member, guild} = interaction;
-    const data = interaction.options.getString('query') || interaction.options.getAttachment('file');
+    const subcommand = interaction.options.getSubcommand();
+    const data = interaction.options.getString('query') || interaction.options.getAttachment('file') || interaction.options.getString('goto');
     if (!data) {
+      if (subcommand === 'goto') {
+        await interaction.reply('Please provide a time to go to');
+        return;
+      }
       await interaction.reply('No query or file provided');
       return;
     }
@@ -56,7 +71,10 @@ async function execute(
       return;
     }
     const resp = await interaction.reply('Processing your request...');
-    
+    if(subcommand === 'goto') {
+      await client.player.goto(guildMember, channel, data as string);
+      return;
+    }
     await client.player.play(guildMember, channel, data)
     
   } catch (e) {

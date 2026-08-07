@@ -6,7 +6,8 @@ import { Mutex, logger } from "../utils/index.js";
 import { DownloadManagerSingleton } from "../misc/DownloadManager.js";
 import { PlayerQueue, QueueItem } from "./playback/PlayerQueue.js";
 import { buttons, generateEmbed } from './playback/Misc.js'
-
+import { spawn } from "child_process";
+import ffmpegBinaryPath from "ffmpeg-static";
 
 
 export class IOEClientPlayback {
@@ -193,6 +194,66 @@ export class IOEClientPlayback {
 
         } catch (e) {
             logger.error(e, `Error in play method in guild ${member.guild?.name}`);
+        }
+    }
+    async goto(member: GuildMember, channel: GuildTextBasedChannel, time: string) {
+        try {
+            console.log(`Goto command called in guild ${member.guild?.name} with time ${time}`);
+            const guildId = member.guild.id;
+            const queue = this.queue.get(guildId);
+            if (!queue.current) {
+                await this.client.sendMention(channel, 'No song is currently playing.', member);
+                return;
+            }
+            const timeParts = time.split(':').map(Number);
+            let seconds = 0;
+            if (timeParts.length === 3) {
+                seconds = timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
+            } else if (timeParts.length === 2) {
+                seconds = timeParts[0] * 60 + timeParts[1];
+            } else if (timeParts.length === 1) {
+                seconds = timeParts[0];
+            }
+            if (seconds < 0) {
+                await this.client.sendMention(channel, `Invalid time.`, member);
+                return;
+            }
+            const player = await this.getPlayer(guildId);
+            if (!player) {
+                await this.client.sendMention(channel, `Something went wrong.`, member);
+                logger.error(`Player not found for guild ${guildId} and time ${time}`);
+                return;
+            }
+            const queueItem = queue.current;
+            let pathToSource: string | null = null;
+            if (queueItem.type === 'youtube') {
+                pathToSource = queueItem.path;
+            } else if (queueItem.type === 'attachment') {
+                pathToSource = queueItem.url;
+            }
+            if (!pathToSource) {
+                await this.client.sendMention(channel, `Something went wrong.`, member);
+                logger.error(`Unsupported queue item type in goto for guild ${guildId}: ${queueItem.type}`);
+                return;
+            }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+            const ffmpegProcess = spawn(ffmpegBinaryPath as unknown as string, [
+                "-ss", seconds.toString(),
+                "-i", pathToSource,
+                "-f", "s16le",
+                "-ar", "48000",
+                "-ac", "2",
+                "pipe:1"
+            ]);
+
+            const resource = createAudioResource(ffmpegProcess.stdout, {
+                inputType: StreamType.Raw,
+            });
+            player.play(resource);
+            const embed = await generateEmbed(queue);
+            await channel.send({ components: [buttons], embeds: [embed] });
+        } catch (e) {
+            logger.error(e, `Error in goto method in guild ${member.guild?.name}`);
         }
     }
     /**
