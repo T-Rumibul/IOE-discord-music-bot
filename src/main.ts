@@ -2,7 +2,7 @@ import { IOEClient } from "./client/IOEClient.js";
 import { logger } from './utils/index.js';
 import { startServer } from "./server.js";
 import { getConfig } from "./config.js";
-import { downloadBinary, checkBinary, BinaryState } from "utils/ytdlpBinaries.js";
+import { downloadBinary, checkBinary, BinaryState } from "./utils/ytdlpBinaries.js";
 const config = getConfig();
 async function main() {
     const ytdlpBinaryState = await checkBinary()

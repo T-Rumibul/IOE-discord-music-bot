@@ -7,7 +7,7 @@
     "esm": true,
   },
   "compilerOptions": {
-    "baseUrl": "./src",
+    "rootDir": "./src",
     "outDir": "./dist",
     "noImplicitAny": true,
     "noImplicitReturns": true,
