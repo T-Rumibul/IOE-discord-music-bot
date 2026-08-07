@@ -7,6 +7,7 @@ import {
   SlashCommandBuilder,
   SlashCommandStringOption,
   SlashCommandSubcommandBuilder,
+  MessageFlags
 } from 'discord.js';
 import { logger } from '../../utils/index.js';
 
@@ -52,8 +53,10 @@ async function execute(
   interaction: ChatInputCommandInteraction
 ) {
   try {
-    if (interaction.channel?.type !== ChannelType.GuildText) return;
-    const {channel, member, guild} = interaction;
+    if (interaction.channel?.type !== ChannelType.GuildText) {
+      await interaction.reply('This command can only be used in a guild text channel.');
+      return;
+    };
     const subcommand = interaction.options.getSubcommand();
     const data = interaction.options.getString('query') || interaction.options.getAttachment('file') || interaction.options.getString('goto');
     if (!data) {
@@ -64,18 +67,14 @@ async function execute(
       await interaction.reply('No query or file provided');
       return;
     }
-    const memberid = member?.user.id;
-    const guildMember = guild?.members.cache.get(memberid || '');
-    if (!guildMember) {
-      await interaction.reply('Something went wrong. Please try again later');
-      return;
-    }
-    const resp = await interaction.reply('Processing your request...');
+
     if(subcommand === 'goto') {
-      await client.player.goto(guildMember, channel, data as string);
+      await interaction.reply({ content: `Going to ${data} in the song...`, flags: MessageFlags.Ephemeral });
+      await client.player.goto(interaction, data as string);
       return;
     }
-    await client.player.play(guildMember, channel, data)
+    await interaction.reply('Processing your request...')
+    await client.player.play(interaction, data);
     
   } catch (e) {
     logger.error(e, 'Error executing play command');

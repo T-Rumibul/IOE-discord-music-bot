@@ -1,5 +1,5 @@
 import { DownloadFinishResult, VideoInfo } from "ytdlp-nodejs";
-import { YTDLP, logger, regexYoutube, sanitizeString } from "../utils/index.js";
+import { YTDLP, logger, sanitizeString } from "../utils/index.js";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -69,51 +69,59 @@ class DownloadManager {
     private audioCache = new Cache<CacheEntry>(audioCacheDir);
     private ytdlp = new YTDLP()
     /**
-     * Public entry point. Queues a download and returns a promise that
-     * resolves when the download (or cache hit) is complete.
+     * Public entry point. Returns path to cached file if available, otherwise downloads it.
+     * @param {VideoInfo} info - The video information.
+     * @param {"video" | "audio"} type - Audioonly or video.
+     * @param {boolean} forceDownload - If true, forces a re-download even if the file is cached.
      */
-    async download(videoURL: string, type: "video" | "audio"): Promise<DownloadResult | null> {
-        logger.debug(`Downloading ${videoURL}`);
+    async download(info: VideoInfo,type: "video" | "audio" = "video", forceDownload: boolean = false): Promise<DownloadResult | null> {
+        logger.debug(`Downloading ${info.webpage_url}`);
         const unlock = await this.downloadMutex.lock();
         try {
-            const result = await this.executeDownload(videoURL, type);
-            logger.debug(`Download complete for ${videoURL}, result: ${JSON.stringify(result)}`);
+            const cacheEntry = await this.getCacheEntry(info.id, type);
+            if (cacheEntry && !forceDownload) {
+                logger.info(`Cache hit for ${info.webpage_url}, returning cached file.`);
+                return { path: cacheEntry.path, filename: cacheEntry.filename, size: cacheEntry.size, date: cacheEntry.date, videoData: cacheEntry.videoData };
+            }
+            const result = await this.executeDownload(info, type);
+            if (!result) {
+                logger.error(`Download failed for ${info.webpage_url}`);
+                return null;
+            }
+            this.saveCacheEntry(info.id, type, { path: result.path, filename: result.filename, size: result.size, date: result.date, videoData: result.videoData });
+            logger.debug(`Download complete for ${info.webpage_url}, result: ${JSON.stringify(result)}`);
             return result;
         } catch (e) {
-            logger.error(e, `Error in download manager for ${videoURL}`);
+            logger.error(e, `Error in download manager for ${info.webpage_url}`);
             return null;
         } finally {
             unlock();
         }
     }
-
+    private async saveCacheEntry(videoID: string, type: "video" | "audio", entry: CacheEntry): Promise<void> {
+        const cacheKey = crypto.createHash("md5").update(videoID).digest("hex");
+        const cache = type === "audio" ? this.audioCache : this.videoCache;
+        cache.set(cacheKey, entry);
+        await this.enforceCacheSizeLimit(type);
+    }
+    public async getCacheEntry(videoID: string, type: "video" | "audio"): Promise<CacheEntry | null> {
+        const cacheKey = crypto.createHash("md5").update(videoID).digest("hex");
+        const cache = type === "audio" ? this.audioCache : this.videoCache;
+        const cached = cache.get(cacheKey);
+        if (cached) {
+            // update access time to prevent eviction
+            cached.date = new Date();
+            cache.set(cacheKey, cached);
+            return cached;
+        }
+        return null;
+    }
     private async executeDownload(
-        videoURL: string,
+        info: VideoInfo,
         type: "video" | "audio" = "video"
     ): Promise<DownloadResult | null> {
         try {
-            const urlMatch = videoURL.match(regexYoutube);
-            if (!urlMatch) return null;
-
-            const videoID = new URL(urlMatch[0]).searchParams.get("v") ?? "";
-            if (!videoID) return null;
-
-            const cacheKey = crypto
-                .createHash("md5")
-                .update(videoID)
-                .digest("hex");
-            const cache = type === "audio" ? this.audioCache : this.videoCache;
-            // Return cached entry if it exists
-            const cached = cache.get(cacheKey);
-            if (cached) {
-                logger.info(`Cache hit for video ID: ${videoID}`);
-                // update access time to prevent eviction
-                cached.date = new Date();
-                cache.set(cacheKey, cached);
-                return { path: cached.path, filename: cached.filename, size: cached.size, date: cached.date, videoData: cached.videoData };
-            }
-
-            const info = await this.ytdlp.getInfoAsync(videoID) as VideoInfo;
+            const videoID = info.id;
             let filename: string;
             let outputPath: string;
             switch (type) {
@@ -129,71 +137,66 @@ class DownloadManager {
                     throw new Error(`Unsupported download type: ${type}`);
             }
            
-            const downloadedFiles = await this.downloadFiles(videoID, type, outputPath);
+            let downloadResult: DownloadFinishResult;
+            switch(type) {
+                case "video":
+                    downloadResult = await this.ytdlp
+                        .download(videoID, { output: outputPath })
+                        .filter("audioandvideo")
+                        .quality("highest")
+                        .type("mp4")
+                        .run();
+                    break;
+                case "audio":
+                    downloadResult = await this.ytdlp.download(videoID, { output: outputPath }).filter("audioonly").quality("highest").type("aac").run();
+                    break;
+                default:
+                    throw new Error(`Unsupported download type: ${type}`);
+            }
 
-            const resolvedPath = downloadedFiles.filePaths[0];
+            const resolvedPath = downloadResult.filePaths[0];
 
             const stats = fs.statSync(resolvedPath);
             const fileSizeMB = stats.size / (1024 * 1024);
 
-            cache.set(cacheKey, {
-                path: resolvedPath,
-                filename,
-                size: fileSizeMB,
-                date: new Date(),
-                videoData: info
-            });
             logger.debug(`Downloaded ${filename} (${fileSizeMB.toFixed(2)} MB)`);
-            await this.enforceCacheSizeLimit(type);
-
-            return { path: resolvedPath, filename, size: fileSizeMB, date: new Date(), videoData: info };
+            return {size: stats.size, date: new Date(), videoData: info, filename: filename, path: resolvedPath};
         } catch (e) {
-            logger.error(e, `Error downloading ${videoURL}`);
+            logger.error(e, `Error downloading ${info.title} (${info.id})`);
             return null;
         }
     }
-    private async downloadFiles(videoID: string, type: "video" | "audio" = 'audio', outputPath: string): Promise<DownloadFinishResult> {
-        if (type === "video") {
-           return this.ytdlp
-                .download(videoID, { output: outputPath })
-                .filter("audioandvideo")
-                .quality("highest")
-                .type("mp4")
-                .run();
-        }
-        return this.ytdlp.download(videoID, { output: outputPath }).filter("audioonly").quality("highest").type("aac").run()
-        
-    }
+
 
     private async enforceCacheSizeLimit(type : "video" | "audio"): Promise<void> {
-        logger.debug("Enforcing cache size limit");
-        const maxSizeMB = type === "audio" ? this.maxAudioCacheSizeMB : this.maxVideoCacheSizeMB;
-        const entries = type === "audio" ? Array.from(this.audioCache.entries()) : Array.from(this.videoCache.entries());
+    //     logger.debug("Enforcing cache size limit");
+    //     const maxSizeMB = type === "audio" ? this.maxAudioCacheSizeMB : this.maxVideoCacheSizeMB;
+    //     const entries = type === "audio" ? Array.from(this.audioCache.entries()) : Array.from(this.videoCache.entries());
 
-        const totalSize = entries.reduce((sum, [, v]) => sum + v.size, 0);
-        if (totalSize <= maxSizeMB) {
-            logger.debug("Cache size limit not exceeded");
-            return;
-        }
+    //     const totalSize = entries.reduce((sum, [, v]) => sum + v.size, 0);
+    //     if (totalSize <= maxSizeMB) {
+    //         logger.debug("Cache size limit not exceeded");
+    //         return;
+    //     }
 
-        const now = Date.now();
+    //     const now = Date.now();
 
-        // Only evict entries older than the minimum cache age (1 hour)
-        const evictable = entries
-            .filter(([, v]) => now - v.date.getTime() > this.minCacheAgeMs)
-            .sort((a, b) => a[1].date.getTime() - b[1].date.getTime()); // oldest first
+    //     // Only evict entries older than the minimum cache age (1 hour)
+    //     const evictable = entries
+    //         .filter(([, v]) => now - v.date.getTime() > this.minCacheAgeMs)
+    //         .sort((a, b) => a[1].date.getTime() - b[1].date.getTime()); // oldest first
 
-        let runningSize = totalSize;
-        for (const [key, value] of evictable) {
-            logger.info(`Evicting cache entry: ${key} (${value.filename})`);
-            if (runningSize <= maxSizeMB) break;
-            await fs.promises.unlink(value.path).catch(err => logger.error(err, `Failed to delete file: ${value.path}`));
-            runningSize -= value.size;
+    //     let runningSize = totalSize;
+    //     for (const [key, value] of evictable) {
+    //         logger.info(`Evicting cache entry: ${key} (${value.filename})`);
+    //         if (runningSize <= maxSizeMB) break;
+    //         await fs.promises.unlink(value.path).catch(err => logger.error(err, `Failed to delete file: ${value.path}`));
+    //         runningSize -= value.size;
 
-            (type === "audio") ? this.audioCache.delete(key) : this.videoCache.delete(key);
+    //         (type === "audio") ? this.audioCache.delete(key) : this.videoCache.delete(key);
 
-            logger.info(`Evicted ${type} cache entry: ${key} (${value.filename})`);
-        }
+    //         logger.info(`Evicted ${type} cache entry: ${key} (${value.filename})`);
+    //     }
     }
 }
 let instance: DownloadManager;

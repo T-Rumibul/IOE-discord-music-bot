@@ -65,7 +65,7 @@ const embedTemplate = {
 export const generateEmbed = async (playerQueue: GuildQueue, paused = false) => {
     const currentItem = playerQueue.current;
     const embed = { ...embedTemplate };
-    embed.title = `${paused ? '[Paused]' : ''} **${currentItem?.title}** [@${currentItem?.requestedBy.user.username}] ${currentItem?.repeat ? '(🔁)' : ''}`;
+    embed.title = `${paused ? '[Paused]' : ''} **${currentItem?.title}** [@${currentItem?.requestedBy.username}] ${currentItem?.repeat ? '(🔁)' : ''}`;
     const desc = []
     const maxItems = 6;
     const queue = playerQueue.queue;
@@ -76,7 +76,7 @@ export const generateEmbed = async (playerQueue: GuildQueue, paused = false) => 
         }
 
         const item = queue[i];
-        desc.push(`${i + 1}. **${item.title}** [@${item?.requestedBy?.user?.username}]`);
+        desc.push(`${i + 1}. **${item.title}** [@${item.requestedBy.username}]`);
     }
 
     embed.description = desc.join('\n');

@@ -12,11 +12,11 @@ import { defineCommand } from '../IOEClientCommands.js';
 import type {IOEClient} from '../IOEClient.js';
 import { DownloadManagerSingleton } from '../../misc/DownloadManager.js';
 import { createAccessKey } from '../../server.js';
-import { logger } from '../../utils/index.js';
+import { logger, YTDLP } from '../../utils/index.js';
 
 const config = getConfig();
 const downloadManager = DownloadManagerSingleton();
-
+const ytdlp = new YTDLP();
 const command = new SlashCommandBuilder();
 command.setName('download');
 command.setDescription('Downloads a video from various platforms');
@@ -35,8 +35,6 @@ querySubCommand.addStringOption(queryOption);
 command.addSubcommand(querySubCommand);
 
 
-
-const downloadsDir = path.join(process.cwd(), config.DOWNLOADS_FOLDER);
 async function execute(
   client: IOEClient,
   interaction: ChatInputCommandInteraction
@@ -49,7 +47,16 @@ async function execute(
       return;
     }
     await interaction.reply({ content: 'Processing your request...', flags: MessageFlags.Ephemeral });
-    const downloadedFiles = await downloadManager.download(URL, 'video');
+    const info = await ytdlp.getInfoAsync(URL);
+    if (!info) {
+      await interaction.editReply({ content: 'Failed to retrieve video information. Please make sure the URL is correct and try again.'});
+      return;
+    }
+    if (info._type !== 'video') {
+      await interaction.editReply({ content: 'The provided URL is not a video. Please provide a valid video URL.'});
+      return;
+    }
+    const downloadedFiles = await downloadManager.download(info, 'video', false);
     if (!downloadedFiles) {
       await interaction.editReply({ content: 'Failed to download the video. Please make sure the URL is correct and try again.'});
       return;

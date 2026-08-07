@@ -1,20 +1,31 @@
 import { GuildMember } from "discord.js";
 import { shuffle } from "../../utils/index.js";
+import type { VideoInfo } from "ytdlp-nodejs";
 
 export type QueueItem = {
-    path: string;
+    id: string;
+    url: string;
     title: string;
-    requestedBy: GuildMember;
+    requestedBy: {
+        id: string;
+        username: string;
+    };
     requestChannelId: string;
     repeat: boolean;
     duration: number;
     thumbnail: string;
-    type: 'youtube';
+    videoData: VideoInfo;
+    requestGuildId: string;
+    type: 'url';
 } | {
     url: string;
     title: string;
-    requestedBy: GuildMember;
+    requestedBy: {
+        id: string;
+        username: string;
+    };
     requestChannelId: string;
+    requestGuildId: string;
     repeat: boolean;
     type: 'attachment';
 }
