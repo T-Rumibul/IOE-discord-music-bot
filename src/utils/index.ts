@@ -14,14 +14,16 @@ const pinoTransport = pino.transport({
       options: {
         colorize: true,
         translateTime: "yyyy-mm-dd HH:MM:ss"
-      }
+      },
     },
     {
       target: 'pino/file',
       options: {
         destination: path.join(process.cwd(), 'logs', 'app.log'),
-        translateTime: "yyyy-mm-dd HH:MM:ss"
-      }
+        translateTime: "yyyy-mm-dd HH:MM:ss",
+        
+      },
+      level: 'debug'
     },
   ],
 });
