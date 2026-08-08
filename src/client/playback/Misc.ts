@@ -80,6 +80,15 @@ export const generateEmbed = async (playerQueue: GuildQueue, paused = false) => 
     }
 
     embed.description = desc.join('\n');
-    embed.image.url = paused ? idleGIF : playGIF;
+    switch (currentItem?.type) {
+        case 'url':
+            embed.image.url = paused ? idleGIF : currentItem.thumbnail || playGIF;
+
+            break;
+        case 'attachment':
+            embed.image.url = paused ? idleGIF : playGIF;
+            break;
+    }
+    
     return embed;
 }
