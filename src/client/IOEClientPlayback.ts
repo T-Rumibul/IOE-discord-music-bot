@@ -354,12 +354,12 @@ export class IOEClientPlayback {
                 const videoInfo = await this.ytdlp.getInfoAsync(data);
                 if(!videoInfo) {
                     logger.error(`Could not fetch video info for ${data}`);
-                    await interaction.reply('Could not fetch video info. Please check the URL and try again.');
+                    await interaction.followUp('Could not fetch video info. Please check the URL and try again.');
                     return;
                 }
                 if(videoInfo._type === 'playlist') {
                     logger.debug(`Playlist request received for ${data} in guild ${interaction.guild?.name}`);
-                    await interaction.reply('Playlists are not supported. Please provide a single video/audio URL.');
+                    await interaction.followUp('Playlists are not supported. Please provide a single video/audio URL.');
                     return;
                 }
                 return {
