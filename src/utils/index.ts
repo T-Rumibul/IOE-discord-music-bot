@@ -19,7 +19,7 @@ const pinoTransport = pino.transport({
     {
       target: 'pino/file',
       options: {
-        destination: path.join(process.cwd(), 'logs', 'app.log'),
+        destination: path.join(process.cwd(), config.LOG_FOLDER, 'app.log'),
         translateTime: "yyyy-mm-dd HH:MM:ss",
         
       },
