@@ -56,7 +56,9 @@ export const downloadBinary = async () => {
         fs.mkdirSync(binariesPath)
     }
     fs.writeFileSync(path.join(binariesPath, asset.name), Buffer.from(buffer))
-
+    if (process.platform !== 'win32') {
+        fs.chmodSync(path.join(binariesPath, asset.name), 0o755)
+    }
 }
 
 
