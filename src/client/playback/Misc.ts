@@ -61,7 +61,15 @@ const embedTemplate = {
     fields: <EmbedField[]>[],
 };
 
-
+async function imageExists(url: string): Promise<boolean> {
+    try {
+        const response = await fetch(url, { method: "HEAD" });
+        return !!(response.ok &&
+            response.headers.get("content-type")?.startsWith("image/"));
+    } catch {
+        return false;
+    }
+}
 export const generateEmbed = async (playerQueue: GuildQueue, paused = false) => {
     const currentItem = playerQueue.current;
     const embed = { ...embedTemplate };
@@ -82,13 +90,27 @@ export const generateEmbed = async (playerQueue: GuildQueue, paused = false) => 
     embed.description = desc.join('\n');
     switch (currentItem?.type) {
         case 'url':
-            embed.image.url = paused ? idleGIF : currentItem.thumbnail || playGIF;
-
+            const imageURL: string[] | undefined[] = [currentItem.thumbnail];
+            // Max resolution thumbnail is usually the last one in the array, so we reverse it to check from highest to lowest resolution.
+            for (const entry of [...currentItem.videoData.thumbnails].reverse()) {
+                imageURL.push(entry.url);
+            }
+            let embedImageURL: string | undefined;
+            for (const url of imageURL) {
+                if (url && await imageExists(url)) {
+                    embedImageURL = url;
+                    break;
+                }
+            }
+            if (embedImageURL) {
+                embed.image.url = embedImageURL;
+            } else {
+                embed.image.url = paused ? idleGIF : playGIF;
+            }
             break;
         case 'attachment':
             embed.image.url = paused ? idleGIF : playGIF;
             break;
     }
-    
     return embed;
 }
