@@ -108,14 +108,14 @@ export class IOEClientPlayback {
             case 'stop': {
                 queue.clear();
                 player.stop();
-                interaction.reply({ content: 'Stopped' });
+                await interaction.reply({ content: 'Stopped' });
                 break;
             }
             case 'next': {
                 if (queue.current?.repeat) queue.toggleRepeat();
                 // Logic is handled by player stateChange event callback
                 player.stop();
-                interaction.update({});
+                await interaction.update({});
                 break;
             }
             case 'toggleRepeat': {
@@ -144,56 +144,45 @@ export class IOEClientPlayback {
      * @param {string | Attachment} data - The song data to play. Can be a URL, video title, or an attachment.
      * @returns {Promise<void>} - A promise that resolves when the operation is complete.
      */
-    async play(interaction: ChatInputCommandInteraction, data: string | Attachment) {
+    async play(data: string | Attachment, { channel, member }: { channel: GuildTextBasedChannel; member: GuildMember }) {
 
         try {
-            logger.info(`Play command called in guild ${interaction.guild?.name} with data ${data}`);
-            const member = interaction.member as GuildMember;
-            if(!member || !member.voice) {
-                await interaction.followUp('Something went wrong. Please try again later.');
+            logger.info(`Play command called in guild ${member.guild.name} with data ${data}`);
+            if(!member.voice || !member.voice.channel) {
+                await channel.send('You need to be in a voice channel to play music.');
                 return;
             }
-            const guildId = interaction.guild?.id;
-            const voiceChannelId = member?.voice.channelId;
-            const channel = interaction.channel as GuildTextBasedChannel;
-            if (!guildId || !channel.isSendable()) {
-                await interaction.followUp('Something went wrong. Please try again later.');
-                return;
-            }
-            if (!voiceChannelId) {
-                await interaction.followUp('You need to be in a voice channel to play music.');
-                return;
-            };
-            const queueItem = await this.processRequest(data, interaction, guildId);
+            const queueItem = await this.processRequest(data, { channel, member });
 
             if (!queueItem) {
-                await interaction.followUp('Something went wrong.');
-                logger.error(`Queue item not found for guild ${guildId} and data ${data}`);
+                await channel.send('Something went wrong.');
+                logger.error(`Queue item not found for guild ${member.guild.id} and data ${data}`);
                 return;
             }
-            const queue = this.queue.get(guildId);
+            const queue = this.queue.get(member.guild.id);
             queue.add(queueItem);
-            const player = await this.getPlayer(guildId);
+            const player = await this.getPlayer(member.guild.id);
             if (!player) {
-                await interaction.followUp('Something went wrong.');
-                logger.error(`Player not found for guild ${guildId} and data ${data}`);
+                await channel.send('Something went wrong.');
+                logger.error(`Player not found for guild ${member.guild.id} and data ${data}`);
                 return;
             }
             if (player.state.status !== AudioPlayerStatus.Idle) {
                 const embed = await generateEmbed(queue);
-                await interaction.followUp({ components: [buttons], embeds: [embed] });
+
+                await channel.send({ components: [buttons], embeds: [embed] });
                 return;
             }
             const connection = await this.getConnection(member);
             if (!connection) {
-                await interaction.followUp('Could not connect to voice channel.');
-                logger.error(`Connection not found for guild ${guildId} and data ${data}`);
+                await channel.send('Could not connect to voice channel.');
+                logger.error(`Connection not found for guild ${member.guild.id} and data ${data}`);
                 return;
             }
             const resource = await this.createAudioResource(queueItem);
             if (!resource) {
-                await interaction.followUp('Something went wrong.');
-                logger.error(`Could not create audio resource for guild ${guildId} and queue item ${queueItem}`);
+                await channel.send('Something went wrong.');
+                logger.error(`Could not create audio resource for guild ${member.guild.id} and queue item ${queueItem}`);
                 return;
             }
             connection.subscribe(player);
@@ -203,21 +192,21 @@ export class IOEClientPlayback {
             await channel.send({ components: [buttons], embeds: [embed] });
 
         } catch (e) {
-            logger.error(e, `Error in play method in guild ${interaction.guild?.name}`);
+            logger.error(e, `Error in play method in guild ${member.guild.name}`);
         }
     }
-    async goto(interaction: ChatInputCommandInteraction, time: string) {
+    async goto(time: string, { channel, member }: { channel: GuildTextBasedChannel; member: GuildMember }) {
         try {
-            console.log(`Goto command called in guild ${interaction.guild?.name} with time ${time}`);
-            const guildId = interaction.guild?.id;
+            console.log(`Goto command called in guild ${member.guild.name} with time ${time}`);
+            const guildId = member.guild.id;
             if (!guildId) {
-                logger.error(`Guild ID not found for interaction ${interaction.id}`);
-                await interaction.followUp('Something went wrong. Please try again later.');
+                logger.error(`Guild ID not found for member ${member.id}`);
+                await channel.send('Something went wrong. Please try again later.');
                 return;
             }
             const queue = this.queue.get(guildId);
             if (!queue.current) {
-                await interaction.followUp('No song is currently playing.');
+                await channel.send('No song is currently playing.');
                 return;
             }
             const timeParts = time.split(':').map(Number);
@@ -230,12 +219,12 @@ export class IOEClientPlayback {
                 seconds = timeParts[0];
             }
             if (seconds < 0) {
-                await interaction.followUp('Invalid time.');
+                await channel.send('Invalid time.');
                 return;
             }
             const player = await this.getPlayer(guildId);
             if (!player) {
-                await interaction.followUp('Something went wrong.');
+                await channel.send('Something went wrong.');
 
                 logger.error(`Player not found for guild ${guildId} and time ${time}`);
                 return;
@@ -245,7 +234,7 @@ export class IOEClientPlayback {
             if (queueItem.type === 'url') {
                 const cacheEntry = await this.downloadManager.getCacheEntry(queueItem.id, 'audio');
                 if(!cacheEntry) {
-                    await interaction.followUp('Audio file not found in cache. Please play the song again.');
+                    await channel.send('Audio file not found in cache. Please play the song again.');
                     logger.error(`Audio file not found in cache for guild ${guildId} and queue item ${queueItem.id}`);
                     return;
                 }
@@ -254,7 +243,7 @@ export class IOEClientPlayback {
                 pathToSource = queueItem.url;
             }
             if (!pathToSource) {
-                await interaction.followUp('Something went wrong.');
+                await channel.send('Something went wrong.');
                 logger.error(`Unsupported queue item type in goto for guild ${guildId}: ${queueItem.type}`);
                 return;
             }
@@ -273,9 +262,9 @@ export class IOEClientPlayback {
             });
             player.play(resource);
             const embed = await generateEmbed(queue);
-            await interaction.followUp({ components: [buttons], embeds: [embed] });
+            await channel.send({ components: [buttons], embeds: [embed] });
         } catch (e) {
-            logger.error(e, `Error in goto method in guild ${interaction.guild?.name}`);
+            logger.error(e, `Error in goto method in guild ${member.guild.name}`);
         }
     }
     /**
@@ -348,18 +337,18 @@ export class IOEClientPlayback {
      * @param {GuildMember} member - The guild member who sent the message
      * @returns {Promise<QueueItem | undefined>} The extracted song, or undefined if an error occurred
      */
-    private async processRequest(data: string | Attachment, interaction: ChatInputCommandInteraction, guildId: string): Promise<QueueItem | undefined> {
+    private async processRequest(data: string | Attachment, { channel, member }: { channel: GuildTextBasedChannel; member: GuildMember }): Promise<QueueItem | undefined> {
         try {
             if (typeof data === 'string') {
                 const videoInfo = await this.ytdlp.getInfoAsync(data);
                 if(!videoInfo) {
                     logger.error(`Could not fetch video info for ${data}`);
-                    await interaction.followUp('Could not fetch video info. Please check the URL and try again.');
+                    await channel.send('Could not fetch video info. Please check the URL and try again.');
                     return;
                 }
                 if(videoInfo._type === 'playlist') {
-                    logger.debug(`Playlist request received for ${data} in guild ${interaction.guild?.name}`);
-                    await interaction.followUp('Playlists are not supported. Please provide a single video/audio URL.');
+                    logger.debug(`Playlist request received for ${data} in guild ${member.guild.name}`);
+                    await channel.send('Playlists are not supported. Please provide a single video/audio URL.');
                     return;
                 }
                 return {
@@ -369,12 +358,12 @@ export class IOEClientPlayback {
                     duration: videoInfo.duration,
                     thumbnail: videoInfo.thumbnails[videoInfo.thumbnails.length - 1].url,
                     requestedBy: {
-                        id: interaction.user.id,
-                        username: interaction.user.username,
+                        id: member.user.id,
+                        username: member.user.username,
                     },
                     videoData: videoInfo,
-                    requestGuildId: guildId,
-                    requestChannelId: interaction.channelId,
+                    requestGuildId: member.guild.id,
+                    requestChannelId: channel.id,
                     type: 'url' as const,
                     repeat: false
                 }
@@ -384,18 +373,18 @@ export class IOEClientPlayback {
                 url: attachment.url,
                 title: attachment.name || "Unknown",
                 requestedBy: {
-                    id: interaction.user.id,
-                    username: interaction.user.username,
+                    id: member.user.id,
+                    username: member.user.username,
                 },
-                requestChannelId: interaction.channelId,
-                requestGuildId: guildId,
+                requestChannelId: channel.id,
+                requestGuildId: member.guild.id,
                 type: 'attachment' as const,
                 repeat: false
             }
 
 
         } catch (e) {
-            logger.error(e, `Error while extracting song in guild ${interaction.guild?.name}`);
+            logger.error(e, `Error while extracting song in guild ${member.guild.name}`);
             return;
         }
     }

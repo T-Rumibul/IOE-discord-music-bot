@@ -67,14 +67,18 @@ async function execute(
       await interaction.reply('No query or file provided');
       return;
     }
-
+    const member = interaction.member;
+    if (!member || !('voice' in member) || !member.voice.channel) {
+      await interaction.reply('You must be in a voice channel to use this command.');
+      return;
+    }
     if(subcommand === 'goto') {
-      await interaction.reply({ content: `Going to ${data} in the song...`, flags: MessageFlags.Ephemeral });
-      await client.player.goto(interaction, data as string);
+      await interaction.reply({ content: `Going to ${data} in the video...`});
+      await client.player.goto(data as string, { channel: interaction.channel, member });
       return;
     }
     await interaction.reply('Processing your request...')
-    await client.player.play(interaction, data);
+    await client.player.play(data, { channel: interaction.channel, member });
     
   } catch (e) {
     logger.error(e, 'Error executing play command');
