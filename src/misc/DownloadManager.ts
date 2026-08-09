@@ -1,28 +1,24 @@
-import { DownloadFinishResult, VideoInfo } from "ytdlp-nodejs";
-import { YTDLP, logger, sanitizeString } from "../utils/index.js";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import sqlite3 from 'sqlite3'
-import { SQL } from 'sql-template-strings';
-import { open, Database } from 'sqlite'
+import Database from "better-sqlite3";
 import { Mutex } from "../utils/index.js";
 import { getConfig } from '../config.js';
+import { DownloadFinishResult, VideoInfo } from "ytdlp-nodejs";
+import { YTDLP, logger, sanitizeString } from "../utils/index.js";
+
 const config = getConfig();
 export const downloadsDir = path.join(process.cwd(), config.DOWNLOADS_FOLDER);
 export const videoCacheDir = path.join(process.cwd(), config.DOWNLOADS_FOLDER, "video");
 export const audioCacheDir = path.join(process.cwd(), config.DOWNLOADS_FOLDER, "audio");
-const dbPath = path.join(process.cwd(), config.DOWNLOADS_FOLDER, '/cache.db');
+const dbPath = path.join(process.cwd(), config.DOWNLOADS_FOLDER, 'cache.db');
 
 // open the database
-const db = await open({
-    filename: dbPath,
-    driver: sqlite3.Database
-})
-await db.exec('CREATE TABLE IF NOT EXISTS audio (hash TEXT, path TEXT, filename TEXT, size INTEGER, date INTEGER, videoData TEXT, reads INTEGER, PRIMARY KEY(hash))');
-await db.exec('CREATE TABLE IF NOT EXISTS video (hash TEXT, path TEXT, filename TEXT, size INTEGER, date INTEGER, videoData TEXT, reads INTEGER, PRIMARY KEY(hash))');
-await db.exec('CREATE INDEX IF NOT EXISTS idx_date ON audio(date)');
-await db.exec('CREATE INDEX IF NOT EXISTS idx_date ON video(date)');
+const db = new Database(dbPath, { verbose: (msg) => logger.debug(msg, 'Database') });
+db.exec('CREATE TABLE IF NOT EXISTS audio (hash TEXT, path TEXT, filename TEXT, size INTEGER, date INTEGER, videoData TEXT, reads INTEGER, PRIMARY KEY(hash))');
+db.exec('CREATE TABLE IF NOT EXISTS video (hash TEXT, path TEXT, filename TEXT, size INTEGER, date INTEGER, videoData TEXT, reads INTEGER, PRIMARY KEY(hash))');
+db.exec('CREATE INDEX IF NOT EXISTS idx_audio_date ON audio(date)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_video_date ON video(date)');
 interface CacheEntry {
     path: string;
     filename: string;
@@ -34,7 +30,9 @@ interface CacheEntry {
 type CacheEntryWithHash = CacheEntry & {
     hash: string;
 };
-
+type DatabaseCacheEntry = Omit<CacheEntryWithHash, 'videoData'> & {
+    videoData: string; 
+};
 interface DownloadResult {
     path: string;
     filename: string;
@@ -42,49 +40,86 @@ interface DownloadResult {
     date: number;
     videoData: VideoInfo;
 }
-
+const insertAudio = db.prepare< [string, string, string, number, number, string, number], void >('INSERT OR REPLACE INTO audio (hash, path, filename, size, date, videoData, reads) VALUES (?, ?, ?, ?, ?, ?, ?)');
+const insertVideo = db.prepare< [string, string, string, number, number, string, number], void >('INSERT OR REPLACE INTO video (hash, path, filename, size, date, videoData, reads) VALUES (?, ?, ?, ?, ?, ?, ?)');
+const getAudio = db.prepare<string, DatabaseCacheEntry | null >('SELECT * FROM audio WHERE hash = ?');
+const getVideo = db.prepare<string, DatabaseCacheEntry | null >('SELECT * FROM video WHERE hash = ?');
+const getAllAudio = db.prepare<[], DatabaseCacheEntry>('SELECT * FROM audio');
+const getAllVideo = db.prepare<[], DatabaseCacheEntry>('SELECT * FROM video');
+const getTotalSizeAudio = db.prepare<unknown[], { totalSize: number | null }>('SELECT SUM(size) as totalSize FROM audio');
+const getTotalSizeVideo = db.prepare<unknown[], { totalSize: number | null }>('SELECT SUM(size) as totalSize FROM video');
+const getOldestAudio = db.prepare<number, DatabaseCacheEntry | null >('SELECT * FROM audio WHERE date < ? ORDER BY date ASC LIMIT 1');
+const getOldestVideo = db.prepare<number, DatabaseCacheEntry | null >('SELECT * FROM video WHERE date < ? ORDER BY date ASC LIMIT 1');
+const deleteAudio = db.prepare<string>('DELETE FROM audio WHERE hash = ?');
+const deleteVideo = db.prepare<string>('DELETE FROM video WHERE hash = ?');
 class Cache {
-    private db: Database<sqlite3.Database, sqlite3.Statement> = db;
-    async set(hash: string, type: "video" | "audio", value: CacheEntry | CacheEntryWithHash): Promise<this> {
-        const query = type === "video" ? SQL`INSERT OR REPLACE INTO video` : SQL`INSERT OR REPLACE INTO audio`;
-        await this.db.run(query.append(SQL` (hash, path, filename, size, date, videoData, reads) VALUES (${hash}, ${value.path}, ${value.filename}, ${value.size}, ${value.date}, ${JSON.stringify(value.videoData)}, ${value.reads})`));
+
+    set(hash: string, type: "video" | "audio", value: CacheEntry | CacheEntryWithHash): this {
+        switch (type) {
+            case "video":
+                insertVideo.run(hash, value.path, value.filename, value.size, value.date, JSON.stringify(value.videoData), value.reads);
+                break;
+            case "audio":
+                insertAudio.run(hash, value.path, value.filename, value.size, value.date, JSON.stringify(value.videoData), value.reads);
+                break;
+        }
         return this;
     }
-    async get(hash: string, type: "video" | "audio"): Promise<CacheEntryWithHash | null> {
-        const query = type === "video" ? SQL`SELECT * FROM video` : SQL`SELECT * FROM audio`;
-        const row = await this.db.get<CacheEntryWithHash>(query.append(SQL` WHERE hash = ${hash}`));
-        if (!row) return null;
-        return row;
-    }
-    async getAll(type: "video" | "audio"): Promise<CacheEntryWithHash[]> {
-        const query = type === "video" ? SQL`SELECT * FROM video` : SQL`SELECT * FROM audio`;
-        const rows = await this.db.all<CacheEntryWithHash[]>(query);
-        return rows;
-    }
-    async getTotalSize(type: "video" | "audio"): Promise<number> {
-        const query = type === "video" ? SQL`SELECT SUM(size) as totalSize FROM video` : SQL`SELECT SUM(size) as totalSize FROM audio`;
-        const row = await this.db.get<{ totalSize: number }>(query);
-        if (!row) {
-            logger.warn(`Failed to get total size for ${type} cache, returning 0`);
-            return 0;
+    get(hash: string, type: "video" | "audio"): CacheEntryWithHash | null {
+        switch (type) {
+            case "video":
+                const videoEntry = getVideo.get(hash);
+                return videoEntry ? { ...videoEntry, videoData: JSON.parse(videoEntry.videoData) } : null;
+            case "audio":
+                const audioEntry = getAudio.get(hash);
+                return audioEntry ? { ...audioEntry, videoData: JSON.parse(audioEntry.videoData) } : null;
+            default:
+                return null;
         }
-        return row.totalSize;
     }
-    async getOldest(type: "video" | "audio", minAgeMs: number): Promise<CacheEntryWithHash | null> {
-        const query = type === "video" ? SQL`SELECT * FROM video` : SQL`SELECT * FROM audio`;
-        const evictable = await db.all<CacheEntryWithHash[]>(
-            query.append(SQL` WHERE date < ${Date.now() - minAgeMs} ORDER BY date ASC LIMIT 1`,
-            ));
-        return evictable[0] ?? null;
+    getAll(type: "video" | "audio"): CacheEntryWithHash[] {
+        let entries: DatabaseCacheEntry[];
+        switch (type) {
+            case "video":
+                entries = getAllVideo.all();
+                break;
+            case "audio":
+                entries = getAllAudio.all();
+                break;
+            default:
+                entries = [];
+        }
+        return entries.map((entry) => ({ ...entry, videoData: JSON.parse(entry.videoData) }));
     }
-    async delete(hash: string, type: "video" | "audio"): Promise<boolean> {
-        const query = type === "video" ? SQL`DELETE FROM video` : SQL`DELETE FROM audio`;
-        const result = await this.db.run(query.append(SQL` WHERE hash = ${hash}`));
-        return result.changes && result.changes > 0 ? true : false;
+    getTotalSize(type: "video" | "audio"): number {
+        const row = type === "video"
+            ? getTotalSizeVideo.get()
+            : getTotalSizeAudio.get();
+
+        return row?.totalSize ?? 0;
+    }
+    getOldest(type: "video" | "audio", minAgeMs: number): CacheEntryWithHash | null {
+        const cutoffDate = Date.now() - minAgeMs;
+        const evictable = type === "video" ? getOldestVideo.get(cutoffDate) : getOldestAudio.get(cutoffDate);
+        return evictable ? { ...evictable, videoData: JSON.parse(evictable.videoData) } : null;
+    }
+    delete(hash: string, type: "video" | "audio"): boolean {
+        switch (type) {
+            case "video":
+                const deleteResult = deleteVideo.run(hash);
+
+                return deleteResult.changes > 0 ? true : false;
+            case "audio":
+                const result = deleteAudio.run(hash);
+                return result.changes > 0 ? true : false;
+            default:
+                return false;
+        }
     }
 
 
 }
+
 
 class DownloadManager {
     private maxVideoCacheSizeMB = 1000;
