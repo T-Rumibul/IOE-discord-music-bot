@@ -2,8 +2,8 @@ import pino from "pino"
 import path from "path";
 import { Download, FormatOptions, PlaylistInfo, QualityOptions, Stream, VideoInfo, YtDlp, YtDlpOptions } from "ytdlp-nodejs";
 import { getConfig } from "../config.js";
-import { binariesMapping } from "./ytdlpBinaries.js";
-const ytdlp = new YtDlp();
+import { getYtdlpBinaryPath } from "./ytdlpBinaries.js";
+import { getFfmpegBinarysPath } from "./ffmpegbinaries.js";
 const cookiesFile = path.join(process.cwd(), 'cookies.txt')
 const config = getConfig();
 
@@ -105,7 +105,7 @@ interface InfoOptions {
  * This prevents repeated cookies configuration across the codebase.
  */
 export class YTDLP extends YtDlp {
-  constructor(options: YtDlpOptions = { binaryPath: getYtdlpBinaryPath() }) {
+  constructor(options: YtDlpOptions = { binaryPath: getYtdlpBinaryPath(), ffmpegPath: getFfmpegBinarysPath() }) {
     if (!options.binaryPath) {
       options = { ...options, binaryPath: getYtdlpBinaryPath() }
     }
@@ -184,16 +184,7 @@ export class Mutex {
 }
 
 
-export const getYtdlpBinaryPath = () => {
-  const arch = process.arch;
-  const platform = process.platform;
 
-  if (binariesMapping[platform + '_' + arch]) {
-    return path.join(process.cwd(), 'binaries', binariesMapping[platform + '_' + arch]);
-  }
-  throw new Error(`Cannot find ytdlp binary for ${platform}_${arch}`);
-
-}
 
 
 export const checkFileURL = async (url: string) => {

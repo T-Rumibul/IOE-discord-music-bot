@@ -6,7 +6,7 @@ import { DownloadManagerSingleton } from "../misc/DownloadManager.js";
 import { PlayerQueue, QueueItem } from "./playback/PlayerQueue.js";
 import { buttons, generateEmbed } from './playback/Misc.js'
 import { spawn } from "child_process";
-import ffmpegBinaryPath from "ffmpeg-static";
+import { getFfmpegBinarysPath } from "../utils/ffmpegbinaries.js";
 
 
 export class IOEClientPlayback {
@@ -197,7 +197,7 @@ export class IOEClientPlayback {
     }
     async goto(time: string, { channel, member }: { channel: GuildTextBasedChannel; member: GuildMember }) {
         try {
-            console.log(`Goto command called in guild ${member.guild.name} with time ${time}`);
+            logger.debug(`Goto command called in guild ${member.guild.name} with time ${time}`);
             const guildId = member.guild.id;
             if (!guildId) {
                 logger.error(`Guild ID not found for member ${member.id}`);
@@ -248,7 +248,7 @@ export class IOEClientPlayback {
                 return;
             }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
-            const ffmpegProcess = spawn(ffmpegBinaryPath as unknown as string, [
+            const ffmpegProcess = spawn(getFfmpegBinarysPath(), [
                 "-ss", seconds.toString(),
                 "-i", pathToSource,
                 "-f", "s16le",

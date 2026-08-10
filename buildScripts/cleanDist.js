@@ -14,7 +14,11 @@ import path from 'path'
 // }
 console.log('Cleaning dist folder...')
 const distPath = path.join(process.cwd(), 'dist')
-
+const isDistExists = fs.existsSync(distPath)
+if (!isDistExists) {
+    console.log('Dist folder does not exist. Nothing to clean.')
+    process.exit(0)
+}
 const contents = fs.readdirSync(distPath)
 for (const entry of contents) {
     const pathToDelete = path.join(distPath, entry)

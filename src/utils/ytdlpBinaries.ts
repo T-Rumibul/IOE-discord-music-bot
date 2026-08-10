@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto'
-const binariesPath = path.join(process.cwd(), 'binaries')
+import { getConfig } from '../config.js';
+const config = getConfig();
+const binariesPath = path.join(process.cwd(), config.BINARY_FOLDER)
 type githubResponse = {
     assets: {
         name: string,
@@ -20,6 +22,17 @@ export const binariesMapping: Record<string, string> = {
     linux_x64: 'yt-dlp_linux',
     linux_arm64: 'yt-dlp_linux_aarch64',
     win32_arm64: 'yt-dlp_arm64.exe'
+}
+
+export const getYtdlpBinaryPath = () => {
+  const arch = process.arch;
+  const platform = process.platform;
+
+  if (binariesMapping[platform + '_' + arch]) {
+    return path.join(process.cwd(), config.BINARY_FOLDER, binariesMapping[platform + '_' + arch]);
+  }
+  throw new Error(`Cannot find ytdlp binary for ${platform}_${arch}`);
+
 }
 const fetchAsset = async () => {
     const resp = await fetch(`https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest`, {

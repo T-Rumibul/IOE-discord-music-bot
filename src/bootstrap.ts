@@ -1,11 +1,16 @@
-import { BinaryState, checkBinary, downloadBinary } from "./utils/ytdlpBinaries.js";
 import fs from "fs";
 import path from "path";
 import { getConfig } from "./config.js";
+import { BinaryState, checkBinary, downloadBinary } from "./utils/ytdlpBinaries.js";
+import { downloadFfmpegBinaries, getFfmpegBinarysPath } from "./utils/ffmpegbinaries.js";
 const config = getConfig();
 const ytdlpBinaryState = await checkBinary()
 if (ytdlpBinaryState === BinaryState.NEED_UPDATE || ytdlpBinaryState === BinaryState.NOT_FOUND) {
     await downloadBinary()
+}
+const ffmpegBinaryPath = getFfmpegBinarysPath()
+if (!fs.existsSync(ffmpegBinaryPath)) {
+    await downloadFfmpegBinaries()
 }
 
 const logDirIsExists = fs.existsSync(path.join(process.cwd(), config.LOG_FOLDER))

@@ -16,6 +16,7 @@ export function getConfig() {
     CLIENT_ID: process.env.DISCORD_CLIENT_ID!,
     DOWNLOADS_FOLDER: "downloads_tmp",
     LOG_FOLDER: "logs",
+    BINARY_FOLDER: "binaries",
     DOWNLOADS_COMMAND_DISABLED: process.env.DOWNLOADS_COMMAND_DISABLED === 'true',
     HOST: process.env.HOST!,
     PORT: process.env.PORT!,
