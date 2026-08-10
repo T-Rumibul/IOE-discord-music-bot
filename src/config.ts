@@ -12,7 +12,7 @@ function validateEnv() {
 export function getConfig() {
   validateEnv();
   return {
-    TOKEN: process.env.DISCORD_TOKEN!,
+    TOKEN: process.env.prod === 'true' ? process.env.DISCORD_TOKEN! : process.env.DEVTOKEN!,
     CLIENT_ID: process.env.DISCORD_CLIENT_ID!,
     DOWNLOADS_FOLDER: "downloads_tmp",
     LOG_FOLDER: "logs",
