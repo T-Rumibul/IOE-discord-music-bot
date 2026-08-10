@@ -7,3 +7,7 @@ cookies.txt
 downloads_tmp
 logs/app.log
 binaries
+ffmpeg.exe
+ffprobe.exe
+ffmpeg
+ffprobe

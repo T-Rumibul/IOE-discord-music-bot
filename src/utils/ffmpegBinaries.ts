@@ -5,7 +5,7 @@ import JSZip from 'jszip'
 import { getConfig } from '../config.js';
 
 const config = getConfig();
-const binariesPath = path.join(process.cwd(), config.BINARY_FOLDER, 'ffmpeg')
+const binariesPath = path.join(process.cwd())
 const zip = new JSZip()
 async function extractZip(zipPath: string, options: { dir: string }): Promise<void> {
     const archive = fs.readFileSync(zipPath);
@@ -62,7 +62,11 @@ function getPlatformKey(): string {
     return key;
 }
 export function getFfmpegBinarysPath() {
-      return path.join(binariesPath);
+      return {
+        dir: binariesPath,
+        ffmpeg: path.join(binariesPath, os.platform() === 'win32' ? `ffmpeg.exe` : 'ffmpeg'),
+        ffprobe: path.join(binariesPath, os.platform() === 'win32' ? `ffprobe.exe` : 'ffprobe')
+      };
 }
 async function fetchJson<T>(url: string): Promise<T> {
     const res = await fetch(url);

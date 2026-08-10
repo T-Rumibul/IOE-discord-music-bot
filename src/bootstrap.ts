@@ -9,7 +9,7 @@ if (ytdlpBinaryState === BinaryState.NEED_UPDATE || ytdlpBinaryState === BinaryS
     await downloadBinary()
 }
 const ffmpegBinaryPath = getFfmpegBinarysPath()
-if (!fs.existsSync(ffmpegBinaryPath)) {
+if (!fs.existsSync(ffmpegBinaryPath.ffmpeg) || !fs.existsSync(ffmpegBinaryPath.ffprobe)) {
     await downloadFfmpegBinaries()
 }
 

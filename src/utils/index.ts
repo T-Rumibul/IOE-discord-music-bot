@@ -105,7 +105,7 @@ interface InfoOptions {
  * This prevents repeated cookies configuration across the codebase.
  */
 export class YTDLP extends YtDlp {
-  constructor(options: YtDlpOptions = { binaryPath: getYtdlpBinaryPath(), ffmpegPath: getFfmpegBinarysPath() }) {
+  constructor(options: YtDlpOptions = { binaryPath: getYtdlpBinaryPath(), ffmpegPath: getFfmpegBinarysPath().dir }) {
     if (!options.binaryPath) {
       options = { ...options, binaryPath: getYtdlpBinaryPath() }
     }
