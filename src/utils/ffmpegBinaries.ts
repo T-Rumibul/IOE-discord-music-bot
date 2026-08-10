@@ -62,9 +62,7 @@ function getPlatformKey(): string {
     return key;
 }
 export function getFfmpegBinarysPath() {
-      return path.join(binariesPath, 'ffmpeg.exe')
-       
-
+      return path.join(binariesPath);
 }
 async function fetchJson<T>(url: string): Promise<T> {
     const res = await fetch(url);
