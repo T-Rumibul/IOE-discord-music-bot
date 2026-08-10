@@ -3,7 +3,7 @@ import path from "path";
 import { Download, FormatOptions, PlaylistInfo, QualityOptions, Stream, VideoInfo, YtDlp, YtDlpOptions } from "ytdlp-nodejs";
 import { getConfig } from "../config.js";
 import { getYtdlpBinaryPath } from "./ytdlpBinaries.js";
-import { getFfmpegBinarysPath } from "./ffmpegbinaries.js";
+import { getFfmpegBinarysPath } from "./ffmpegBinaries.js";
 const cookiesFile = path.join(process.cwd(), 'cookies.txt')
 const config = getConfig();
 

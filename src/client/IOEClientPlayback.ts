@@ -6,7 +6,7 @@ import { DownloadManagerSingleton } from "../misc/DownloadManager.js";
 import { PlayerQueue, QueueItem } from "./playback/PlayerQueue.js";
 import { buttons, generateEmbed } from './playback/Misc.js'
 import { spawn } from "child_process";
-import { getFfmpegBinarysPath } from "../utils/ffmpegbinaries.js";
+import { getFfmpegBinarysPath } from "../utils/ffmpegBinaries.js";
 
 
 export class IOEClientPlayback {
