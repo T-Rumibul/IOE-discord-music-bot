@@ -2,7 +2,12 @@ import dotenv from "dotenv";
 
 dotenv.config();
 function validateEnv() {
-  const requiredEnvVars = ['DISCORD_TOKEN', 'HOST', 'PORT', 'DISCORD_CLIENT_ID'];
+  const requiredEnvVars = ['HOST', 'PORT'];
+  if(process.env.prod === 'false') {
+    requiredEnvVars.push('DEVTOKEN', 'DEV_CLIENT_ID');
+  } else {
+    requiredEnvVars.push('DISCORD_TOKEN', 'DISCORD_CLIENT_ID');
+  }
   const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
   if (missingVars.length > 0) {
     throw new Error(`Missing environment variables: ${missingVars.join(', ')}`);
@@ -13,7 +18,7 @@ export function getConfig() {
   validateEnv();
   return {
     TOKEN: process.env.prod === 'true' ? process.env.DISCORD_TOKEN! : process.env.DEVTOKEN!,
-    CLIENT_ID: process.env.DISCORD_CLIENT_ID!,
+    CLIENT_ID: process.env.prod === 'true' ? process.env.DISCORD_CLIENT_ID! : process.env.DEV_CLIENT_ID!,
     DOWNLOADS_FOLDER: "downloads_tmp",
     LOG_FOLDER: "logs",
     BINARY_FOLDER: "binaries",

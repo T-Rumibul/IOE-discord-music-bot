@@ -14,6 +14,9 @@
   "author": "T-Rumibul",
   "type": "module",
   "main": "bootstrap.js",
+  "engines": {
+    "node": "24.x"
+    },
   "scripts": {
     "dev": "tsx watch src/bootstrap.ts",
     "prebuild": "node buildScripts/cleanDist.js",
