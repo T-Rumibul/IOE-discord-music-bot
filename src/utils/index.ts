@@ -4,7 +4,6 @@ import { Download, FormatOptions, PlaylistInfo, QualityOptions, Stream, VideoInf
 import { getConfig } from "../config.js";
 import { getYtdlpBinaryPath } from "./ytdlpBinaries.js";
 import { getFfmpegBinarysPath } from "./ffmpegBinaries.js";
-const cookiesFile = path.join(process.cwd(), 'cookies.txt')
 const config = getConfig();
 
 const pinoTransport = pino.transport({
@@ -112,21 +111,21 @@ export class YTDLP extends YtDlp {
     super(options);
   }
 
-  stream<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress"> = { cookies: cookiesFile }): Stream {
+  stream<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress"> = { cookies: config.COOKIE_FILE }): Stream {
     if (!options.cookies) {
-      options = { ...options, cookies: cookiesFile }
+      options = { ...options, cookies: config.COOKIE_FILE }
     }
     return super.stream(url, options);
   }
-  download<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress" | "beforeDownload"> = { cookies: cookiesFile }): Download {
+  download<F extends keyof QualityOptions>(url: string, options: Omit<FormatOptions<F>, "onProgress" | "beforeDownload"> = { cookies: config.COOKIE_FILE }): Download {
     if (!options.cookies) {
-      options = { ...options, cookies: cookiesFile }
+      options = { ...options, cookies: config.COOKIE_FILE }
     }
     return super.download(url, options);
   }
-  getInfoAsync<T extends "video" | "playlist">(url: string, options: InfoOptions = { cookies: cookiesFile }): Promise<T extends "video" ? VideoInfo : PlaylistInfo> {
+  getInfoAsync<T extends "video" | "playlist">(url: string, options: InfoOptions = { cookies: config.COOKIE_FILE }): Promise<T extends "video" ? VideoInfo : PlaylistInfo> {
     if (!options.cookies) {
-      options = { ...options, cookies: cookiesFile }
+      options = { ...options, cookies: config.COOKIE_FILE }
     }
     return super.getInfoAsync<T>(url, options);
   }
